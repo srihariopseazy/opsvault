@@ -12,6 +12,12 @@ import { useToast } from '../components/ui/Toast';
 import { ROUTES } from '../utils/constants';
 import { DecryptedVaultItem } from '../store/slices/vaultSlice';
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string') return err;
+  try { return JSON.stringify(err); } catch { return 'Unexpected error'; }
+}
+
 export default function Unlock() {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -27,15 +33,21 @@ export default function Unlock() {
 
   const handleUnlock = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[Unlock] handleUnlock invoked');
     if (!password || !user || !protectedSymmetricKey) return;
     setUnlocking(true);
     try {
+      console.log('[Unlock] step 1: deriving master key…');
       const masterKey = await deriveMasterKey(password, user.email, kdfIterations);
+
+      console.log('[Unlock] step 2: unwrapping symmetric key…');
       const symKey = await unwrapSymmetricKey(protectedSymmetricKey, masterKey);
       dispatch(setSymmetricKey(symKey));
 
+      console.log('[Unlock] step 3: syncing vault…');
       dispatch(setLoading(true));
       const syncRes = await vaultApi.sync();
+
       const decrypted: DecryptedVaultItem[] = (
         await Promise.all(
           syncRes.data.items.map(async (item) => {
@@ -58,7 +70,8 @@ export default function Unlock() {
                 createdAt: item.created_at,
                 revisionDate: item.revision_date,
               };
-            } catch {
+            } catch (itemErr) {
+              console.error('[Unlock] failed to decrypt item', item.uuid, itemErr);
               return null;
             }
           })
@@ -67,13 +80,19 @@ export default function Unlock() {
 
       dispatch(setItems(decrypted));
       dispatch(setLoading(false));
+      console.log('[Unlock] done — navigating to vault');
       navigate(ROUTES.VAULT);
-    } catch {
-      toast.error('Incorrect master password');
+    } catch (err: unknown) {
+      console.error('[Unlock] handleUnlock failed:', err);
+      dispatch(setLoading(false));
+      toast.error(errorMessage(err));
     } finally {
       setUnlocking(false);
     }
-  }, [password, user, protectedSymmetricKey, kdfIterations, deriveMasterKey, unwrapSymmetricKey, dispatch, navigate, toast]);
+    // toast intentionally excluded from deps — stable reference, adding it
+    // causes infinite re-creation of the callback (violates critical rule 5).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [password, user, protectedSymmetricKey, kdfIterations, deriveMasterKey, unwrapSymmetricKey, dispatch, navigate]);
 
   const handleLogout = async () => {
     try { await authApi.logout(); } catch { /* ignore */ }

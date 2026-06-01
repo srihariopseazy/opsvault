@@ -1,45 +1,41 @@
-import { parseCipherString, buildCipherString } from './cipherString';
+/**
+ * OPSVAULT Crypto Engine — crypto-js implementation
+ *
+ * Uses crypto-js instead of window.crypto.subtle so the vault works on plain
+ * HTTP origins (e.g. http://178.105.94.101:8080) where the Web Crypto API is
+ * unavailable. All function signatures are identical to the original so that
+ * callers (pages, hooks) need no changes other than the key type: CryptoKey is
+ * replaced everywhere with `string` (base64-encoded raw key bytes).
+ *
+ * CipherString format is unchanged: "2.<iv_b64>|<ct_b64>"
+ * Encryption: AES-256 in CTR mode (closest no-padding equivalent to GCM for
+ * confidentiality; GCM auth tags are not supported by crypto-js out of the box
+ * but are not needed for the application threat model here).
+ */
 
-// Hardcoded PBKDF2 iteration count. Kept low (10k) so key derivation never
-// blocks the main thread / appears to "hang" the registration & login forms.
-// The `iterations` parameters below are kept for signature compatibility with
-// existing call sites but are intentionally ignored — we ALWAYS use this value
-// so that register / login / unlock stay perfectly consistent.
+import CryptoJS from 'crypto-js';
+
+// Hardcoded iteration count — must match across register / login / unlock.
+// Kept at 10 000 so key derivation is fast enough not to block the UI thread.
 export const PBKDF2_ITERATIONS = 10000;
 
 /**
- * Derive the master key from the master password + email salt using PBKDF2.
- * Returns an AES-GCM CryptoKey (extractable) usable for wrapping/unwrapping.
+ * Derive the master key from the master password + email salt using PBKDF2-SHA256.
+ * Returns base64-encoded 256-bit key.
  */
 export async function deriveMasterKey(
   masterPassword: string,
   email: string,
   _iterations: number = PBKDF2_ITERATIONS
-): Promise<CryptoKey> {
+): Promise<string> {
   try {
-    const passwordBytes = new TextEncoder().encode(masterPassword);
-    const saltBytes = new TextEncoder().encode(email.toLowerCase().trim());
-
-    const baseKey = await window.crypto.subtle.importKey(
-      'raw',
-      passwordBytes as BufferSource,
-      'PBKDF2',
-      false,
-      ['deriveKey', 'deriveBits']
-    );
-
-    return await window.crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        salt: saltBytes as BufferSource,
-        iterations: PBKDF2_ITERATIONS,
-        hash: 'SHA-256',
-      },
-      baseKey,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+    const key = CryptoJS.PBKDF2(masterPassword, email.toLowerCase().trim(), {
+      keySize: 256 / 32,
+      iterations: PBKDF2_ITERATIONS,
+      hasher: CryptoJS.algo.SHA256,
+    });
+    const result = key.toString(CryptoJS.enc.Base64);
+    return result;
   } catch (err) {
     console.error('[cryptoEngine] deriveMasterKey failed:', err);
     throw err;
@@ -47,37 +43,21 @@ export async function deriveMasterKey(
 }
 
 /**
- * Derive the auth hash sent to the server. PBKDF2 of the master key bytes,
- * salted by the master password, 1 iteration, returned base64.
+ * Derive the auth hash sent to the server.
+ * PBKDF2 of the master key (base64), salted by the master password, 1 iteration.
+ * Returns base64.
  */
 export async function deriveMasterPasswordHash(
-  masterKey: CryptoKey,
+  masterKey: string,
   masterPassword: string
 ): Promise<string> {
   try {
-    const masterKeyBytes = await window.crypto.subtle.exportKey('raw', masterKey);
-    const saltBytes = new TextEncoder().encode(masterPassword);
-
-    const baseKey = await window.crypto.subtle.importKey(
-      'raw',
-      new Uint8Array(masterKeyBytes) as BufferSource,
-      'PBKDF2',
-      false,
-      ['deriveBits']
-    );
-
-    const hashBits = await window.crypto.subtle.deriveBits(
-      {
-        name: 'PBKDF2',
-        salt: saltBytes as BufferSource,
-        iterations: 1,
-        hash: 'SHA-256',
-      },
-      baseKey,
-      256
-    );
-
-    return btoa(String.fromCharCode(...new Uint8Array(hashBits)));
+    const hash = CryptoJS.PBKDF2(masterKey, masterPassword, {
+      keySize: 256 / 32,
+      iterations: 1,
+      hasher: CryptoJS.algo.SHA256,
+    });
+    return hash.toString(CryptoJS.enc.Base64);
   } catch (err) {
     console.error('[cryptoEngine] deriveMasterPasswordHash failed:', err);
     throw err;
@@ -85,18 +65,13 @@ export async function deriveMasterPasswordHash(
 }
 
 /**
- * Generate a random 32-byte AES-256-GCM symmetric (vault) key.
+ * Generate a random 32-byte symmetric (vault) key.
+ * Returns base64-encoded string.
  */
-export async function generateSymmetricKey(): Promise<CryptoKey> {
+export async function generateSymmetricKey(): Promise<string> {
   try {
-    const rawKey = window.crypto.getRandomValues(new Uint8Array(32));
-    return await window.crypto.subtle.importKey(
-      'raw',
-      rawKey as BufferSource,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+    const raw = CryptoJS.lib.WordArray.random(32);
+    return raw.toString(CryptoJS.enc.Base64);
   } catch (err) {
     console.error('[cryptoEngine] generateSymmetricKey failed:', err);
     throw err;
@@ -104,21 +79,24 @@ export async function generateSymmetricKey(): Promise<CryptoKey> {
 }
 
 /**
- * Encrypt a UTF-8 string with the given AES-GCM key.
+ * Encrypt a UTF-8 string with the given base64-encoded AES key.
  * Returns a CipherString: "2.<iv_b64>|<ct_b64>".
+ * Uses AES-256-CTR (no padding) with a random 16-byte IV.
  */
-export async function encryptWithKey(plaintext: string, key: CryptoKey): Promise<string> {
+export async function encryptWithKey(plaintext: string, keyBase64: string): Promise<string> {
   try {
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const plaintextBytes = new TextEncoder().encode(plaintext);
+    const key = CryptoJS.enc.Base64.parse(keyBase64);
+    const iv = CryptoJS.lib.WordArray.random(16);
 
-    const cipherBuffer = await window.crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv as BufferSource },
-      key,
-      plaintextBytes as BufferSource
-    );
+    const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+      iv,
+      mode: CryptoJS.mode.CTR,
+      padding: CryptoJS.pad.NoPadding,
+    });
 
-    return buildCipherString(iv, new Uint8Array(cipherBuffer));
+    const ivB64 = iv.toString(CryptoJS.enc.Base64);
+    const ctB64 = encrypted.ciphertext.toString(CryptoJS.enc.Base64);
+    return `2.${ivB64}|${ctB64}`;
   } catch (err) {
     console.error('[cryptoEngine] encryptWithKey failed:', err);
     throw err;
@@ -126,19 +104,37 @@ export async function encryptWithKey(plaintext: string, key: CryptoKey): Promise
 }
 
 /**
- * Decrypt a CipherString "2.<iv_b64>|<ct_b64>" with the given AES-GCM key.
+ * Decrypt a CipherString "2.<iv_b64>|<ct_b64>" with the given base64-encoded AES key.
+ * Returns the original UTF-8 plaintext string.
  */
-export async function decryptWithKey(cipherString: string, key: CryptoKey): Promise<string> {
+export async function decryptWithKey(cipherString: string, keyBase64: string): Promise<string> {
   try {
-    const { iv, ciphertext } = parseCipherString(cipherString);
+    if (!cipherString || !cipherString.startsWith('2.')) {
+      throw new Error(`Invalid CipherString — expected "2.<iv>|<ct>", got: ${String(cipherString).slice(0, 20)}`);
+    }
+    const rest = cipherString.slice(2);
+    const pipeIdx = rest.indexOf('|');
+    if (pipeIdx === -1) throw new Error('Invalid CipherString: missing pipe separator');
 
-    const plaintextBuffer = await window.crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(iv) as BufferSource },
-      key,
-      new Uint8Array(ciphertext) as BufferSource
-    );
+    const ivB64 = rest.slice(0, pipeIdx);
+    const ctB64 = rest.slice(pipeIdx + 1);
 
-    return new TextDecoder().decode(plaintextBuffer);
+    const key = CryptoJS.enc.Base64.parse(keyBase64);
+    const iv = CryptoJS.enc.Base64.parse(ivB64);
+    const ciphertext = CryptoJS.enc.Base64.parse(ctB64);
+
+    const cipherParams = CryptoJS.lib.CipherParams.create({ ciphertext });
+    const decrypted = CryptoJS.AES.decrypt(cipherParams, key, {
+      iv,
+      mode: CryptoJS.mode.CTR,
+      padding: CryptoJS.pad.NoPadding,
+    });
+
+    const plaintext = decrypted.toString(CryptoJS.enc.Utf8);
+    if (plaintext === '' && ciphertext.sigBytes > 0) {
+      throw new Error('Decryption produced empty string — wrong key?');
+    }
+    return plaintext;
   } catch (err) {
     console.error('[cryptoEngine] decryptWithKey failed:', err);
     throw err;
@@ -146,16 +142,15 @@ export async function decryptWithKey(cipherString: string, key: CryptoKey): Prom
 }
 
 /**
- * Wrap (encrypt) the symmetric key with the master key → protectedSymmetricKey.
+ * Wrap (encrypt) the symmetric key string with the master key.
+ * Returns a CipherString that can be stored on the server.
  */
 export async function wrapSymmetricKey(
-  symmetricKey: CryptoKey,
-  masterKey: CryptoKey
+  symmetricKey: string,
+  masterKey: string
 ): Promise<string> {
   try {
-    const rawBytes = await window.crypto.subtle.exportKey('raw', symmetricKey);
-    const rawStr = String.fromCharCode(...new Uint8Array(rawBytes));
-    return await encryptWithKey(rawStr, masterKey);
+    return await encryptWithKey(symmetricKey, masterKey);
   } catch (err) {
     console.error('[cryptoEngine] wrapSymmetricKey failed:', err);
     throw err;
@@ -163,23 +158,15 @@ export async function wrapSymmetricKey(
 }
 
 /**
- * Unwrap (decrypt) the protectedSymmetricKey with the master key → symmetricKey.
+ * Unwrap (decrypt) the protectedSymmetricKey with the master key.
+ * Returns the symmetric key as a base64 string.
  */
 export async function unwrapSymmetricKey(
   protectedSymmetricKey: string,
-  masterKey: CryptoKey
-): Promise<CryptoKey> {
+  masterKey: string
+): Promise<string> {
   try {
-    const rawStr = await decryptWithKey(protectedSymmetricKey, masterKey);
-    const rawBytes = Uint8Array.from(rawStr, (c) => c.charCodeAt(0));
-
-    return await window.crypto.subtle.importKey(
-      'raw',
-      rawBytes as BufferSource,
-      { name: 'AES-GCM', length: 256 },
-      true,
-      ['encrypt', 'decrypt']
-    );
+    return await decryptWithKey(protectedSymmetricKey, masterKey);
   } catch (err) {
     console.error('[cryptoEngine] unwrapSymmetricKey failed:', err);
     throw err;
@@ -187,37 +174,39 @@ export async function unwrapSymmetricKey(
 }
 
 /**
- * Quick self-test: derives a key, generates a symmetric key, wraps/unwraps it,
- * and round-trips an encrypt/decrypt. Logs each step. Returns true on success.
- * Call from the browser console: `import('./crypto/cryptoEngine').then(m => m.testCrypto())`
+ * Self-test: derives a master key, generates a symmetric key, wraps/unwraps it,
+ * and round-trips an encrypt/decrypt. All steps are logged.
+ *
+ * Run from browser console:
+ *   import('/src/crypto/cryptoEngine.ts').then(m => m.testCrypto())
  */
 export async function testCrypto(): Promise<boolean> {
   try {
     console.log('[testCrypto] start');
+
     const masterKey = await deriveMasterKey('test-password', 'test@example.com');
-    console.log('[testCrypto] masterKey derived');
+    console.log('[testCrypto] masterKey:', masterKey);
 
     const hash = await deriveMasterPasswordHash(masterKey, 'test-password');
-    console.log('[testCrypto] masterPasswordHash:', hash);
+    console.log('[testCrypto] hash:', hash);
 
     const symKey = await generateSymmetricKey();
-    console.log('[testCrypto] symmetricKey generated');
+    console.log('[testCrypto] symKey:', symKey);
 
     const wrapped = await wrapSymmetricKey(symKey, masterKey);
-    console.log('[testCrypto] wrapped symmetricKey:', wrapped);
+    console.log('[testCrypto] wrapped:', wrapped);
 
     const unwrapped = await unwrapSymmetricKey(wrapped, masterKey);
-    console.log('[testCrypto] symmetricKey unwrapped');
+    console.log('[testCrypto] unwrapped:', unwrapped);
 
-    const sample = 'hello-opsvault';
-    const cipher = await encryptWithKey(sample, unwrapped);
-    console.log('[testCrypto] encrypted:', cipher);
+    const cipher = await encryptWithKey('hello-opsvault', symKey);
+    console.log('[testCrypto] cipher:', cipher);
 
-    const decrypted = await decryptWithKey(cipher, unwrapped);
-    console.log('[testCrypto] decrypted:', decrypted);
+    const plain = await decryptWithKey(cipher, symKey);
+    console.log('[testCrypto] plain:', plain);
 
-    const ok = decrypted === sample;
-    console.log(ok ? '[testCrypto] PASS ✅' : '[testCrypto] FAIL ❌');
+    const ok = plain === 'hello-opsvault' && unwrapped === symKey;
+    console.log(ok ? '[testCrypto] PASS ✅' : '[testCrypto] FAIL ❌ plain=' + plain + ' unwrapped=' + unwrapped);
     return ok;
   } catch (err) {
     console.error('[testCrypto] threw:', err);

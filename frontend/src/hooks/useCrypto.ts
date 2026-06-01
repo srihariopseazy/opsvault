@@ -12,13 +12,19 @@ import {
 } from '../crypto/cryptoEngine';
 import { setSymmetricKey, lockVault } from '../store/slices/vaultSlice';
 
+// symmetricKey is a base64 string (crypto-js), not a Web Crypto CryptoKey.
 export function useCrypto() {
   const dispatch = useDispatch<AppDispatch>();
   const symmetricKey = useSelector((s: RootState) => s.vault.symmetricKey);
   const isUnlocked = useSelector((s: RootState) => s.vault.isUnlocked);
 
   const unlock = useCallback(
-    async (masterPassword: string, email: string, protectedSymmetricKey: string, iterations: number) => {
+    async (
+      masterPassword: string,
+      email: string,
+      protectedSymmetricKey: string,
+      iterations: number
+    ): Promise<string> => {
       const masterKey = await deriveMasterKey(masterPassword, email, iterations);
       const symKey = await unwrapSymmetricKey(protectedSymmetricKey, masterKey);
       dispatch(setSymmetricKey(symKey));

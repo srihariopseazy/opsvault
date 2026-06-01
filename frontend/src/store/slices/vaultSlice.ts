@@ -17,9 +17,11 @@ export interface DecryptedVaultItem {
   revisionDate?: string;
 }
 
+// symmetricKey is now a base64 string (crypto-js), not a CryptoKey object.
+// This is fully serializable so no Redux serializableCheck overrides are needed.
 interface VaultState {
   isUnlocked: boolean;
-  symmetricKey: CryptoKey | null;
+  symmetricKey: string | null;
   items: DecryptedVaultItem[];
   loading: boolean;
   error: string | null;
@@ -37,7 +39,7 @@ const vaultSlice = createSlice({
   name: 'vault',
   initialState,
   reducers: {
-    setSymmetricKey(state, action: PayloadAction<CryptoKey>) {
+    setSymmetricKey(state, action: PayloadAction<string>) {
       state.symmetricKey = action.payload;
       state.isUnlocked = true;
     },

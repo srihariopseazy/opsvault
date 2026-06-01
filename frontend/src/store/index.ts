@@ -2,19 +2,13 @@ import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
 import vaultReducer from './slices/vaultSlice';
 
+// symmetricKey is now a plain base64 string (crypto-js), so no serializable
+// check overrides are needed — Redux can handle it without special configuration.
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     vault: vaultReducer,
   },
-  middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware({
-      serializableCheck: {
-        // CryptoKey is not serializable — ignore it in vault slice
-        ignoredPaths: ['vault.symmetricKey'],
-        ignoredActions: ['vault/setSymmetricKey', 'vault/lockVault'],
-      },
-    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;
