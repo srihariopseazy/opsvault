@@ -1,0 +1,77 @@
+services:
+  opsvault_backend:
+    build: ./backend
+    container_name: opsvault_backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=mysql+aiomysql://opsvault_user:opsvault_password@opsvault_mysql:3306/opsvault
+      - REDIS_URL=redis://opsvault_redis:6379/0
+      - SECRET_KEY=opsvault_super_secret_key_minimum_32_characters_long
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - FRONTEND_URL=http://localhost:8080
+    depends_on:
+      opsvault_mysql:
+        condition: service_healthy
+      opsvault_redis:
+        condition: service_started
+    networks:
+      - opsvault_net
+
+  opsvault_frontend:
+    build: ./frontend
+    container_name: opsvault_frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost/api/v1
+    networks:
+      - opsvault_net
+
+  opsvault_mysql:
+    image: mysql:8.0
+    container_name: opsvault_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: opsvault
+      MYSQL_USER: opsvault_user
+      MYSQL_PASSWORD: opsvault_password
+      MYSQL_ROOT_PASSWORD: opsvault_root_password
+    volumes:
+      - opsvault_mysql_data:/var/lib/mysql
+    networks:
+      - opsvault_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-popsvault_root_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  opsvault_redis:
+    image: redis:7-alpine
+    container_name: opsvault_redis
+    restart: unless-stopped
+    networks:
+      - opsvault_net
+
+  opsvault_nginx:
+    image: nginx:alpine
+    container_name: opsvault_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - opsvault_backend
+      - opsvault_frontend
+    networks:
+      - opsvault_net
+
+volumes:
+  opsvault_mysql_data:
+
+networks:
+  opsvault_net:
+    driver: bridge
