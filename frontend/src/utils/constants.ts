@@ -15,6 +15,8 @@ export const ITEM_TYPES = {
 
 export const CIPHER_PREFIX = '2.';
 
-export const KDF_ITERATIONS = 600000;
+// Must match PBKDF2_ITERATIONS in crypto/cryptoEngine.ts. This value is sent to
+// the server and stored as kdf_iterations so login/unlock derive the same key.
+export const KDF_ITERATIONS = 10000;
 
 export const CLIPBOARD_CLEAR_DELAY_MS = 30_000;

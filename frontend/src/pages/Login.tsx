@@ -12,6 +12,16 @@ import { useToast } from '../components/ui/Toast';
 import { ROUTES } from '../utils/constants';
 import { DecryptedVaultItem } from '../store/slices/vaultSlice';
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unexpected error';
+  }
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -24,13 +34,19 @@ export default function Login() {
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[Login] handleSubmit invoked');
     if (!email || !password) return;
     setSubmitting(true);
     try {
+      console.log('[Login] step 1: deriving master key…');
       const masterKey = await deriveMasterKey(password, email);
+
+      console.log('[Login] step 2: deriving master password hash…');
       const masterPasswordHash = await deriveMasterPasswordHash(masterKey, password);
 
+      console.log('[Login] step 3: calling /auth/login…');
       const { data } = await authApi.login({ email, masterPasswordHash });
+      console.log('[Login] step 4: login API returned', data.user);
 
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
@@ -41,49 +57,57 @@ export default function Login() {
         kdfIterations: data.kdf_iterations,
       }));
 
+      console.log('[Login] step 5: unwrapping symmetric key into memory…');
       const symKey = await unwrapSymmetricKey(data.protected_symmetric_key, masterKey);
       dispatch(setSymmetricKey(symKey));
 
+      console.log('[Login] step 6: syncing vault…');
       dispatch(setLoading(true));
       const syncRes = await vaultApi.sync();
-      const decrypted: DecryptedVaultItem[] = await Promise.all(
-        syncRes.data.items.map(async (item) => {
-          try {
-            const nameStr = await decryptWithKey(item.name, symKey);
-            const notesStr = item.notes ? await decryptWithKey(item.notes, symKey) : undefined;
-            const dataStr = await decryptWithKey(item.item_data as string, symKey);
-            return {
-              uuid: item.uuid,
-              type: item.type as DecryptedVaultItem['type'],
-              name: nameStr,
-              notes: notesStr,
-              favorite: item.favorite,
-              folderId: item.folder_id,
-              itemData: JSON.parse(dataStr),
-              customFields: item.custom_fields,
-              passwordHistory: item.password_history,
-              reprompt: item.reprompt,
-              deletedAt: item.deleted_at,
-              createdAt: item.created_at,
-              updatedAt: item.updated_at,
-              revisionDate: item.revision_date,
-            };
-          } catch {
-            return null;
-          }
-        })
-      ).then((r) => r.filter(Boolean) as DecryptedVaultItem[]);
+      const decrypted: DecryptedVaultItem[] = (
+        await Promise.all(
+          syncRes.data.items.map(async (item) => {
+            try {
+              const nameStr = await decryptWithKey(item.name, symKey);
+              const notesStr = item.notes ? await decryptWithKey(item.notes, symKey) : undefined;
+              const dataStr = await decryptWithKey(item.item_data as string, symKey);
+              return {
+                uuid: item.uuid,
+                type: item.type as DecryptedVaultItem['type'],
+                name: nameStr,
+                notes: notesStr,
+                favorite: item.favorite,
+                folderId: item.folder_id,
+                itemData: JSON.parse(dataStr),
+                customFields: item.custom_fields,
+                passwordHistory: item.password_history,
+                reprompt: item.reprompt,
+                deletedAt: item.deleted_at,
+                createdAt: item.created_at,
+                updatedAt: item.updated_at,
+                revisionDate: item.revision_date,
+              };
+            } catch (itemErr) {
+              console.error('[Login] failed to decrypt item', item.uuid, itemErr);
+              return null;
+            }
+          })
+        )
+      ).filter(Boolean) as DecryptedVaultItem[];
 
       dispatch(setItems(decrypted));
       dispatch(setLoading(false));
+      console.log('[Login] done — navigating to vault');
       navigate(ROUTES.VAULT);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Login failed';
-      toast.error(msg);
+      console.error('[Login] handleSubmit failed:', err);
+      dispatch(setLoading(false));
+      toast.error(errorMessage(err));
     } finally {
       setSubmitting(false);
     }
-  }, [email, password, deriveMasterKey, deriveMasterPasswordHash, unwrapSymmetricKey, dispatch, navigate, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, password, deriveMasterKey, deriveMasterPasswordHash, unwrapSymmetricKey, dispatch, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">

@@ -9,6 +9,16 @@ import { useCrypto } from '../hooks/useCrypto';
 import { useToast } from '../components/ui/Toast';
 import { ROUTES, KDF_ITERATIONS } from '../utils/constants';
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unexpected error';
+  }
+}
+
 export default function Register() {
   const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
@@ -35,6 +45,8 @@ export default function Register() {
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[Register] handleSubmit invoked');
+
     if (form.password !== form.confirm) {
       toast.error('Passwords do not match');
       return;
@@ -43,13 +55,22 @@ export default function Register() {
       toast.error('Master password must be at least 8 characters');
       return;
     }
+
     setSubmitting(true);
     try {
+      console.log('[Register] step 1: deriving master key…');
       const masterKey = await deriveMasterKey(form.password, form.email, KDF_ITERATIONS);
+
+      console.log('[Register] step 2: deriving master password hash…');
       const masterPasswordHash = await deriveMasterPasswordHash(masterKey, form.password);
+
+      console.log('[Register] step 3: generating symmetric key…');
       const symKey = await generateSymmetricKey();
+
+      console.log('[Register] step 4: wrapping symmetric key…');
       const protectedSymmetricKey = await wrapSymmetricKey(symKey, masterKey);
 
+      console.log('[Register] step 5: calling /auth/register…');
       const { data } = await authApi.register({
         email: form.email,
         name: form.name,
@@ -58,6 +79,7 @@ export default function Register() {
         protectedSymmetricKey,
         kdfIterations: KDF_ITERATIONS,
       });
+      console.log('[Register] step 6: register API returned', data.user);
 
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('refresh_token', data.refresh_token);
@@ -68,19 +90,22 @@ export default function Register() {
         kdfIterations: data.kdf_iterations,
       }));
 
+      console.log('[Register] step 7: unwrapping symmetric key into memory…');
       const loadedKey = await unwrapSymmetricKey(data.protected_symmetric_key, masterKey);
       dispatch(setSymmetricKey(loadedKey));
       dispatch(setItems([]));
 
+      console.log('[Register] done — navigating to vault');
       toast.success('Account created! Welcome to OPSVAULT.');
       navigate(ROUTES.VAULT);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Registration failed';
-      toast.error(msg);
+      console.error('[Register] handleSubmit failed:', err);
+      toast.error(errorMessage(err));
     } finally {
       setSubmitting(false);
     }
-  }, [form, deriveMasterKey, deriveMasterPasswordHash, generateSymmetricKey, wrapSymmetricKey, unwrapSymmetricKey, dispatch, navigate, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, deriveMasterKey, deriveMasterPasswordHash, generateSymmetricKey, wrapSymmetricKey, unwrapSymmetricKey, dispatch, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
