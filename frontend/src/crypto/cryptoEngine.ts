@@ -19,14 +19,14 @@ export async function deriveMasterKey(
   return window.crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: saltBytes,
+      salt: saltBytes as BufferSource,
       iterations,
       hash: 'SHA-256',
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },
     true,
-    ['encrypt', 'decrypt', 'deriveKey', 'deriveBits']
+    ['encrypt', 'decrypt']
   );
 }
 
@@ -48,7 +48,7 @@ export async function deriveMasterPasswordHash(
   const hashBits = await window.crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
-      salt: saltBytes,
+      salt: saltBytes as BufferSource,
       iterations: 1,
       hash: 'SHA-256',
     },
@@ -75,7 +75,7 @@ export async function encryptWithKey(
   const plaintextBytes = new TextEncoder().encode(plaintext);
 
   const cipherBytes = await window.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as BufferSource },
     key,
     plaintextBytes
   );
@@ -90,7 +90,7 @@ export async function decryptWithKey(
   const { iv, ciphertext } = parseCipherString(cipherString);
 
   const plaintextBytes = await window.crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as BufferSource },
     key,
     ciphertext
   );
@@ -116,7 +116,7 @@ export async function unwrapSymmetricKey(
 
   return window.crypto.subtle.importKey(
     'raw',
-    rawBytes,
+    rawBytes as BufferSource,
     { name: 'AES-GCM', length: 256 },
     true,
     ['encrypt', 'decrypt']
