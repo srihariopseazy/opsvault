@@ -1,0 +1,15 @@
+# Create .gitignore
+@"
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+node_modules/
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.log
+opsvault_mysql_data/
+"@ | Out-File -FilePath C:\Users\opsea\Desktop\opsvault\.gitignore -Encoding utf8
