@@ -37,7 +37,7 @@ export default function Trash() {
                 name: nameStr,
                 notes: notesStr,
                 favorite: item.favorite,
-                folderId: (item as { folder_uuid?: string }).folder_uuid || undefined,
+                folderId: (item as { folder_id?: string }).folder_id || undefined,
                 itemData: JSON.parse(dataStr),
                 reprompt: item.reprompt,
                 deletedAt: item.deleted_at,
@@ -218,3 +218,4 @@ export default function Trash() {
     </div>
   );
 }
+

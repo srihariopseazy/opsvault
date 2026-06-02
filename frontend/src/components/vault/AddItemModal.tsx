@@ -60,7 +60,7 @@ export function AddItemModal({ open, onClose, onSaved, editingItem, symmetricKey
         favorite: form.favorite,
         item_data: encData,
         reprompt: false,
-        folder_uuid: form.folderUuid || undefined,
+        folder_id: form.folderUuid || undefined,
       };
 
       if (editingItem) {
@@ -74,7 +74,7 @@ export function AddItemModal({ open, onClose, onSaved, editingItem, symmetricKey
           notes: decNotes,
           itemData: decData,
           favorite: data.favorite,
-          folderId: data.folder_uuid || undefined,
+          folderId: data.folder_id || undefined,
           updatedAt: data.updated_at,
           revisionDate: data.revision_date,
         };
@@ -91,7 +91,7 @@ export function AddItemModal({ open, onClose, onSaved, editingItem, symmetricKey
           name: decName,
           notes: decNotes,
           favorite: data.favorite,
-          folderId: data.folder_uuid || undefined,
+          folderId: data.folder_id || undefined,
           itemData: decData,
           reprompt: data.reprompt,
           createdAt: data.created_at,
@@ -230,3 +230,4 @@ export function AddItemModal({ open, onClose, onSaved, editingItem, symmetricKey
     </>
   );
 }
+
