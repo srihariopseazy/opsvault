@@ -16,6 +16,9 @@ import Import from './pages/Import';
 import Settings from './pages/Settings';
 import VaultHealth from './pages/VaultHealth';
 import SessionManagement from './pages/SessionManagement';
+import Organizations from './pages/Organizations';
+import OrgDetail from './pages/OrgDetail';
+import CollectionDetail from './pages/CollectionDetail';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -70,6 +73,9 @@ function AppRoutes() {
         <Route path={ROUTES.SETTINGS}            element={<Settings />} />
         <Route path={ROUTES.VAULT_HEALTH}        element={<VaultHealth />} />
         <Route path={ROUTES.SESSION_MANAGEMENT}  element={<SessionManagement />} />
+        <Route path={ROUTES.ORGANIZATIONS}        element={<Organizations />} />
+        <Route path="/organizations/:uuid"        element={<OrgDetail />} />
+        <Route path="/organizations/:uuid/collections/:colUuid" element={<CollectionDetail />} />
       </Route>
 
       <Route path="/" element={<Navigate to={ROUTES.VAULT} replace />} />

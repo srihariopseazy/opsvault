@@ -12,6 +12,9 @@ export const ROUTES = {
   SETTINGS: '/settings',
   VAULT_HEALTH: '/vault-health',
   SESSION_MANAGEMENT: '/session-management',
+  ORGANIZATIONS: '/organizations',
+  ORG_DETAIL: '/organizations/:uuid',
+  COLLECTION_DETAIL: '/organizations/:uuid/collections/:colUuid',
 } as const;
 
 export const ITEM_TYPES = {
