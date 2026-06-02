@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from models.vault_item import VaultItem
+from models.vault_item import VaultItem, VaultItemType
 from models.user import User
 from schemas.vault import (
     VaultItemCreate,
@@ -119,6 +119,15 @@ class VaultService:
         if data.favorite is not None:
             item.favorite = 1 if data.favorite else 0
         if data.item_data is not None:
+            # For login items, snapshot the old encrypted item_data in password_history
+            # before overwriting so the frontend can decrypt and display prior passwords.
+            if item.type == VaultItemType.login and item.item_data != data.item_data:
+                history: list = list(item.password_history or [])
+                history.insert(0, {
+                    "encryptedItemData": item.item_data,
+                    "changedAt": datetime.now(timezone.utc).isoformat(),
+                })
+                item.password_history = history[:5]
             item.item_data = data.item_data
         if data.custom_fields is not None:
             item.custom_fields = data.custom_fields
@@ -203,3 +212,21 @@ class VaultService:
             await db.delete(item)
         await db.flush()
         return count
+
+    @staticmethod
+    async def toggle_favorite(user: User, item_uuid: str, db: AsyncSession) -> VaultItemResponse:
+        result = await db.execute(
+            select(VaultItem).where(
+                and_(
+                    VaultItem.uuid == item_uuid,
+                    VaultItem.user_id == user.id,
+                    VaultItem.deleted_at.is_(None),
+                )
+            )
+        )
+        item = result.scalar_one_or_none()
+        if not item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+        item.favorite = 0 if item.favorite else 1
+        await db.flush()
+        return _to_response(item)

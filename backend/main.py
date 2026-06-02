@@ -9,6 +9,7 @@ from routes.auth import router as auth_router
 from routes.vault import router as vault_router
 from routes.dashboard import router as dashboard_router
 from routes.folders import router as folders_router
+from routes.settings import router as settings_router
 
 
 @asynccontextmanager
@@ -37,3 +38,4 @@ app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(vault_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
 app.include_router(folders_router, prefix=API_PREFIX)
+app.include_router(settings_router, prefix=API_PREFIX)

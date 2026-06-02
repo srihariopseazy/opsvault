@@ -72,4 +72,8 @@ export const vaultApi = {
   purgeTrash() {
     return client.post('/vault/purge-trash');
   },
+
+  toggleFavorite(uuid: string) {
+    return client.post<VaultItemResponse>(`/vault/items/${uuid}/favorite`);
+  },
 };

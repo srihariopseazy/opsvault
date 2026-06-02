@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import React from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
 import { RootState, AppDispatch } from '../store';
@@ -186,6 +187,17 @@ export default function Vault() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
+  const handleToggleFavorite = useCallback(async (item: DecryptedVaultItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { data } = await vaultApi.toggleFavorite(item.uuid);
+      dispatch(updateItem({ ...item, favorite: data.favorite }));
+    } catch {
+      toast.error('Failed to update favorite');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dispatch]);
+
   const folderName = folderParam ? folders.find((f) => f.uuid === folderParam)?.name : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -317,6 +329,7 @@ export default function Vault() {
                   item={item}
                   active={viewItem?.uuid === item.uuid && viewOpen}
                   onSelect={() => handleItemClick(item)}
+                  onToggleFavorite={handleToggleFavorite}
                   folders={folders}
                 />
               ))}
@@ -376,11 +389,12 @@ function SidebarBtn({
 }
 
 function ItemCard({
-  item, active, onSelect, folders,
+  item, active, onSelect, onToggleFavorite, folders,
 }: {
   item: DecryptedVaultItem;
   active: boolean;
   onSelect: () => void;
+  onToggleFavorite: (item: DecryptedVaultItem, e: React.MouseEvent) => void;
   folders: FolderResponse[];
 }) {
   const subtitle = getItemSubtitle(item.type, item.itemData as Record<string, unknown>);
@@ -430,11 +444,20 @@ function ItemCard({
 
       {/* Badges */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        {item.favorite && (
-          <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+        <button
+          type="button"
+          onClick={(e) => onToggleFavorite(item, e)}
+          title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          className="p-0.5 rounded hover:bg-amber-50 transition-colors"
+        >
+          <svg
+            className={`w-3.5 h-3.5 transition-colors ${item.favorite ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'}`}
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
           </svg>
-        )}
+        </button>
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[item.type] || 'bg-gray-100 text-gray-600'}`}>
           {item.type}
         </span>

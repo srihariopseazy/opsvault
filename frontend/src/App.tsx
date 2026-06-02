@@ -11,6 +11,10 @@ import Unlock from './pages/Unlock';
 import Folders from './pages/Folders';
 import Generator from './pages/Generator';
 import Trash from './pages/Trash';
+import Export from './pages/Export';
+import Import from './pages/Import';
+import Settings from './pages/Settings';
+import VaultHealth from './pages/VaultHealth';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -55,11 +59,15 @@ function AppRoutes() {
           </RequireUnlocked>
         }
       >
-        <Route path={ROUTES.VAULT}     element={<Vault />} />
-        <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
-        <Route path={ROUTES.FOLDERS}   element={<Folders />} />
-        <Route path={ROUTES.GENERATOR} element={<Generator />} />
-        <Route path={ROUTES.TRASH}     element={<Trash />} />
+        <Route path={ROUTES.VAULT}        element={<Vault />} />
+        <Route path={ROUTES.DASHBOARD}    element={<Dashboard />} />
+        <Route path={ROUTES.FOLDERS}      element={<Folders />} />
+        <Route path={ROUTES.GENERATOR}    element={<Generator />} />
+        <Route path={ROUTES.TRASH}        element={<Trash />} />
+        <Route path={ROUTES.EXPORT}       element={<Export />} />
+        <Route path={ROUTES.IMPORT}       element={<Import />} />
+        <Route path={ROUTES.SETTINGS}     element={<Settings />} />
+        <Route path={ROUTES.VAULT_HEALTH} element={<VaultHealth />} />
       </Route>
 
       <Route path="/" element={<Navigate to={ROUTES.VAULT} replace />} />

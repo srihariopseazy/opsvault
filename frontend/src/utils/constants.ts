@@ -7,6 +7,10 @@ export const ROUTES = {
   FOLDERS: '/folders',
   GENERATOR: '/generator',
   TRASH: '/trash',
+  EXPORT: '/export',
+  IMPORT: '/import',
+  SETTINGS: '/settings',
+  VAULT_HEALTH: '/vault-health',
 } as const;
 
 export const ITEM_TYPES = {

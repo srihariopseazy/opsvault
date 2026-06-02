@@ -104,3 +104,12 @@ async def purge_trash(
 ):
     count = await VaultService.purge_trash(current_user, db)
     return MessageResponse(message=f"Permanently deleted {count} items from trash")
+
+
+@router.post("/items/{uuid}/favorite", response_model=VaultItemResponse)
+async def toggle_favorite(
+    uuid: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await VaultService.toggle_favorite(current_user, uuid, db)
