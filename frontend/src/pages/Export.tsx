@@ -125,9 +125,9 @@ export default function Export() {
         'notes', 'favorite', 'createdAt',
       ];
       const rows = exportable.map((item) => {
-        const shaped = itemToExportShape(item) as ExportLoginItem;
+        const shaped = itemToExportShape(item) as unknown as ExportLoginItem;
         return headers
-          .map((h) => escapeCsvField(String((shaped as Record<string, unknown>)[h] ?? '')))
+          .map((h) => escapeCsvField(String((shaped as unknown as Record<string, unknown>)[h] ?? '')))
           .join(',');
       });
       downloadBlob(
