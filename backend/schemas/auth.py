@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Literal
 
 
 class RegisterRequest(BaseModel):
@@ -14,6 +14,8 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     masterPasswordHash: str
+    # Phase 4: sent by the browser to check against trusted devices
+    device_fingerprint: Optional[str] = None
 
 
 class RefreshRequest(BaseModel):
@@ -30,6 +32,7 @@ class UserResponse(BaseModel):
     uuid: str
     email: str
     name: str
+    totp_enabled: bool = False
 
 
 class AuthResponse(BaseModel):
@@ -39,3 +42,34 @@ class AuthResponse(BaseModel):
     user: UserResponse
     protected_symmetric_key: str
     kdf_iterations: int
+
+
+# ── Phase 4: MFA schemas ─────────────────────────────────────────────────────
+
+class MfaRequiredResponse(BaseModel):
+    """Returned by /auth/login when the user has TOTP enabled and the device
+    is not trusted.  The client must follow up with /auth/verify-mfa."""
+    mfa_required: Literal[True] = True
+    mfa_token: str
+
+
+class VerifyMfaRequest(BaseModel):
+    mfa_token: str
+    totp_code: str
+    trust_device: bool = False
+    device_fingerprint: Optional[str] = None
+    device_name: Optional[str] = None
+
+
+class TotpStatusResponse(BaseModel):
+    totp_enabled: bool
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    otpauth_url: str
+
+
+class TotpEnableRequest(BaseModel):
+    secret: str
+    totp_code: str

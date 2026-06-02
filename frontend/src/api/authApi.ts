@@ -12,15 +12,32 @@ export interface RegisterPayload {
 export interface LoginPayload {
   email: string;
   masterPasswordHash: string;
+  device_fingerprint?: string;
 }
 
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
-  user: { uuid: string; email: string; name: string };
+  user: { uuid: string; email: string; name: string; totp_enabled: boolean };
   protected_symmetric_key: string;
   kdf_iterations: number;
+}
+
+/** Returned by /auth/login when the user has TOTP enabled on an untrusted device. */
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  mfa_token: string;
+}
+
+export type LoginResponse = AuthResponse | MfaRequiredResponse;
+
+export interface VerifyMfaPayload {
+  mfa_token: string;
+  totp_code: string;
+  trust_device?: boolean;
+  device_fingerprint?: string;
+  device_name?: string;
 }
 
 /**
@@ -32,7 +49,7 @@ function toError(context: string, err: unknown): Error {
     response?: { status?: number; data?: { detail?: unknown } };
     message?: string;
   };
-  const status = axiosErr?.response?.status;
+  const httpStatus = axiosErr?.response?.status;
   const detail = axiosErr?.response?.data?.detail;
 
   let message: string;
@@ -46,9 +63,9 @@ function toError(context: string, err: unknown): Error {
     message = 'Unknown error';
   }
 
-  console.error(`[authApi] ${context} error:`, { status, detail, raw: err });
+  console.error(`[authApi] ${context} error:`, { status: httpStatus, detail, raw: err });
   const wrapped = new Error(message);
-  (wrapped as Error & { status?: number }).status = status;
+  (wrapped as Error & { status?: number }).status = httpStatus;
   return wrapped;
 }
 
@@ -67,11 +84,22 @@ export const authApi = {
   async login(payload: LoginPayload) {
     console.log('[authApi] login → request', { email: payload.email, masterPasswordHash: '***' });
     try {
-      const res = await client.post<AuthResponse>('/auth/login', payload);
-      console.log('[authApi] login ← response', res.status, res.data?.user);
+      const res = await client.post<LoginResponse>('/auth/login', payload);
+      console.log('[authApi] login ← response', res.status);
       return res;
     } catch (err) {
       throw toError('login', err);
+    }
+  },
+
+  async verifyMfa(payload: VerifyMfaPayload) {
+    console.log('[authApi] verifyMfa → request');
+    try {
+      const res = await client.post<AuthResponse>('/auth/verify-mfa', payload);
+      console.log('[authApi] verifyMfa ← response', res.status, res.data?.user);
+      return res;
+    } catch (err) {
+      throw toError('verifyMfa', err);
     }
   },
 
@@ -93,7 +121,7 @@ export const authApi = {
 
   async me() {
     try {
-      return await client.get<{ uuid: string; email: string; name: string }>('/auth/me');
+      return await client.get<{ uuid: string; email: string; name: string; totp_enabled: boolean }>('/auth/me');
     } catch (err) {
       throw toError('me', err);
     }
@@ -108,6 +136,38 @@ export const authApi = {
       return await client.post('/auth/change-master-password', payload);
     } catch (err) {
       throw toError('changeMasterPassword', err);
+    }
+  },
+
+  async getTotpStatus() {
+    try {
+      return await client.get<{ totp_enabled: boolean }>('/auth/totp/status');
+    } catch (err) {
+      throw toError('getTotpStatus', err);
+    }
+  },
+
+  async setupTotp() {
+    try {
+      return await client.get<{ secret: string; otpauth_url: string }>('/auth/totp/setup');
+    } catch (err) {
+      throw toError('setupTotp', err);
+    }
+  },
+
+  async enableTotp(payload: { secret: string; totp_code: string }) {
+    try {
+      return await client.post<{ message: string }>('/auth/totp/enable', payload);
+    } catch (err) {
+      throw toError('enableTotp', err);
+    }
+  },
+
+  async disableTotp() {
+    try {
+      return await client.post<{ message: string }>('/auth/totp/disable');
+    } catch (err) {
+      throw toError('disableTotp', err);
     }
   },
 };

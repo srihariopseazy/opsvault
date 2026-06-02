@@ -18,6 +18,11 @@ class User(Base):
     email_verified = Column(TINYINT(1), default=0)
     is_active = Column(TINYINT(1), default=1)
     is_superuser = Column(TINYINT(1), default=0)
+
+    # Phase 4: TOTP 2FA
+    totp_secret = Column(String(255), nullable=True)
+    totp_enabled = Column(TINYINT(1), default=0)
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     last_login_at = Column(DateTime, nullable=True)
@@ -25,3 +30,4 @@ class User(Base):
     vault_items = relationship("VaultItem", back_populates="user", cascade="all, delete-orphan")
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
+    trusted_devices = relationship("TrustedDevice", back_populates="user", cascade="all, delete-orphan")

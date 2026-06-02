@@ -15,6 +15,7 @@ import Export from './pages/Export';
 import Import from './pages/Import';
 import Settings from './pages/Settings';
 import VaultHealth from './pages/VaultHealth';
+import SessionManagement from './pages/SessionManagement';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -64,10 +65,11 @@ function AppRoutes() {
         <Route path={ROUTES.FOLDERS}      element={<Folders />} />
         <Route path={ROUTES.GENERATOR}    element={<Generator />} />
         <Route path={ROUTES.TRASH}        element={<Trash />} />
-        <Route path={ROUTES.EXPORT}       element={<Export />} />
-        <Route path={ROUTES.IMPORT}       element={<Import />} />
-        <Route path={ROUTES.SETTINGS}     element={<Settings />} />
-        <Route path={ROUTES.VAULT_HEALTH} element={<VaultHealth />} />
+        <Route path={ROUTES.EXPORT}              element={<Export />} />
+        <Route path={ROUTES.IMPORT}              element={<Import />} />
+        <Route path={ROUTES.SETTINGS}            element={<Settings />} />
+        <Route path={ROUTES.VAULT_HEALTH}        element={<VaultHealth />} />
+        <Route path={ROUTES.SESSION_MANAGEMENT}  element={<SessionManagement />} />
       </Route>
 
       <Route path="/" element={<Navigate to={ROUTES.VAULT} replace />} />

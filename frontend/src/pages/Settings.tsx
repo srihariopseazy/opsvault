@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { RootState, AppDispatch } from '../store';
 import { clearAuth, updateProtectedSymmetricKey } from '../store/slices/authSlice';
 import { lockVault } from '../store/slices/vaultSlice';
@@ -14,6 +14,8 @@ import {
   deriveMasterPasswordHash,
   wrapSymmetricKey,
 } from '../crypto/cryptoEngine';
+
+// ── Shared sub-components ─────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -73,6 +75,186 @@ function PasswordField({
   );
 }
 
+// ── TOTP section ──────────────────────────────────────────────────────────────
+
+function TotpSection() {
+  const toast = useToast();
+  const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
+  const [setupSecret, setSetupSecret] = useState('');
+  const [setupUrl, setSetupUrl] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [disabling, setDisabling] = useState(false);
+
+  useEffect(() => {
+    authApi.getTotpStatus()
+      .then((r) => setTotpEnabled(r.data.totp_enabled))
+      .catch(() => setTotpEnabled(false));
+  }, []);
+
+  const handleSetupOpen = useCallback(async () => {
+    try {
+      const { data } = await authApi.setupTotp();
+      setSetupSecret(data.secret);
+      setSetupUrl(data.otpauth_url);
+      setVerifyCode('');
+      setSetupOpen(true);
+    } catch {
+      toast.error('Failed to generate TOTP secret');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleEnable = useCallback(async () => {
+    if (!verifyCode.trim() || verifyCode.length !== 6) {
+      toast.error('Enter the 6-digit code from your authenticator app');
+      return;
+    }
+    setSaving(true);
+    try {
+      await authApi.enableTotp({ secret: setupSecret, totp_code: verifyCode });
+      setTotpEnabled(true);
+      setSetupOpen(false);
+      toast.success('Two-factor authentication enabled');
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message || 'Invalid TOTP code';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyCode, setupSecret]);
+
+  const handleDisable = useCallback(async () => {
+    setDisabling(true);
+    try {
+      await authApi.disableTotp();
+      setTotpEnabled(false);
+      toast.success('Two-factor authentication disabled');
+    } catch {
+      toast.error('Failed to disable 2FA');
+    } finally {
+      setDisabling(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (totpEnabled === null) {
+    return <p className="text-sm text-gray-400">Loading…</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-700">Authenticator app (TOTP)</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {totpEnabled
+              ? 'Two-factor authentication is active.'
+              : 'Add an extra layer of security to your account.'}
+          </p>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+          totpEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+        }`}>
+          {totpEnabled ? 'Enabled' : 'Disabled'}
+        </span>
+      </div>
+
+      {totpEnabled ? (
+        <button
+          type="button"
+          onClick={handleDisable}
+          disabled={disabling}
+          className="border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 font-medium py-2 px-4 rounded-lg text-sm transition-colors"
+        >
+          {disabling ? 'Disabling…' : 'Disable 2FA'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSetupOpen}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors"
+        >
+          Enable 2FA
+        </button>
+      )}
+
+      {/* Setup modal */}
+      <Modal
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        title="Set up two-factor authentication"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Scan the code below with your authenticator app (Google Authenticator, Authy, etc.),
+            or enter the secret key manually.
+          </p>
+
+          {/* Secret key (plaintext fallback for manual entry) */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+              Secret key (manual entry)
+            </label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono tracking-widest break-all">
+                {setupSecret}
+              </code>
+            </div>
+          </div>
+
+          {/* TOTP provisioning URI (copy for password manager apps) */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+              OTPAuth URL
+            </label>
+            <p className="text-[11px] text-gray-400 break-all bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono">
+              {setupUrl}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Verify — enter the 6-digit code from your app
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').substring(0, 6))}
+              placeholder="000000"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono tracking-[0.4em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setSetupOpen(false)}
+              className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleEnable}
+              disabled={saving || verifyCode.length !== 6}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+            >
+              {saving ? 'Verifying…' : 'Activate 2FA'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function Settings() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
@@ -113,15 +295,10 @@ export default function Settings() {
 
     setCpSaving(true);
     try {
-      // Derive current master password hash
       const currentMasterKey = await deriveMasterKey(cpForm.current, user.email, kdfIterations);
       const currentHash = await deriveMasterPasswordHash(currentMasterKey, cpForm.current);
-
-      // Derive new master key + hash
       const newMasterKey = await deriveMasterKey(cpForm.newPw, user.email, kdfIterations);
       const newHash = await deriveMasterPasswordHash(newMasterKey, cpForm.newPw);
-
-      // Re-encrypt the symmetric key with the new master key
       const newProtectedSymmetricKey = await wrapSymmetricKey(symmetricKey, newMasterKey);
 
       await authApi.changeMasterPassword({
@@ -130,7 +307,6 @@ export default function Settings() {
         newProtectedSymmetricKey,
       });
 
-      // Update Redux with new protected key
       dispatch(updateProtectedSymmetricKey(newProtectedSymmetricKey));
       setCpForm({ current: '', newPw: '', confirm: '' });
       toast.success('Master password changed successfully');
@@ -230,19 +406,45 @@ export default function Settings() {
         </button>
       </Section>
 
+      {/* Two-factor authentication */}
+      <Section title="Two-factor authentication">
+        <TotpSection />
+      </Section>
+
       {/* Security */}
       <Section title="Security">
-        <p className="text-sm text-gray-600">
-          Log out from all browsers and devices simultaneously. You will need to sign in again.
-        </p>
-        <button
-          type="button"
-          onClick={handleLogoutAll}
-          disabled={loggingOut}
-          className="border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 font-medium py-2 px-4 rounded-lg text-sm transition-colors"
-        >
-          {loggingOut ? 'Logging out…' : 'Log out all devices'}
-        </button>
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="text-sm text-gray-600">
+              Review all active sessions, see login history, and revoke access from
+              other devices.
+            </p>
+            <Link
+              to={ROUTES.SESSION_MANAGEMENT}
+              className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 font-medium hover:underline"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
+              </svg>
+              Manage sessions →
+            </Link>
+          </div>
+
+          <div className="border-t border-gray-100 pt-3">
+            <p className="text-sm text-gray-600 mb-2">
+              Log out from all browsers and devices simultaneously.
+            </p>
+            <button
+              type="button"
+              onClick={handleLogoutAll}
+              disabled={loggingOut}
+              className="border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 font-medium py-2 px-4 rounded-lg text-sm transition-colors"
+            >
+              {loggingOut ? 'Logging out…' : 'Log out all devices'}
+            </button>
+          </div>
+        </div>
       </Section>
 
       {/* Danger zone */}

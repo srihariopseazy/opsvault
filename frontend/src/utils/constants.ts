@@ -11,6 +11,7 @@ export const ROUTES = {
   IMPORT: '/import',
   SETTINGS: '/settings',
   VAULT_HEALTH: '/vault-health',
+  SESSION_MANAGEMENT: '/session-management',
 } as const;
 
 export const ITEM_TYPES = {
