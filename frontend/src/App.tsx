@@ -8,6 +8,9 @@ import Register from './pages/Register';
 import Vault from './pages/Vault';
 import Dashboard from './pages/Dashboard';
 import Unlock from './pages/Unlock';
+import Folders from './pages/Folders';
+import Generator from './pages/Generator';
+import Trash from './pages/Trash';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -30,9 +33,11 @@ function RequireUnlocked({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
+      {/* Public auth routes */}
       <Route path={ROUTES.LOGIN} element={<Login />} />
       <Route path={ROUTES.REGISTER} element={<Register />} />
 
+      {/* Authenticated but vault may be locked */}
       <Route
         path={ROUTES.UNLOCK}
         element={
@@ -42,6 +47,7 @@ function AppRoutes() {
         }
       />
 
+      {/* Authenticated + vault unlocked — inside AppLayout */}
       <Route
         element={
           <RequireUnlocked>
@@ -49,8 +55,11 @@ function AppRoutes() {
           </RequireUnlocked>
         }
       >
-        <Route path={ROUTES.VAULT} element={<Vault />} />
+        <Route path={ROUTES.VAULT}     element={<Vault />} />
         <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
+        <Route path={ROUTES.FOLDERS}   element={<Folders />} />
+        <Route path={ROUTES.GENERATOR} element={<Generator />} />
+        <Route path={ROUTES.TRASH}     element={<Trash />} />
       </Route>
 
       <Route path="/" element={<Navigate to={ROUTES.VAULT} replace />} />

@@ -20,12 +20,18 @@ class VaultItem(Base):
     user_id = Column(BIGINT(unsigned=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     type = Column(
         Enum(VaultItemType, values_callable=lambda x: [e.value for e in x]),
-        nullable=False
+        nullable=False,
     )
     name = Column(Text, nullable=False)
     notes = Column(Text, nullable=True)
     favorite = Column(TINYINT(1), default=0)
     folder_id = Column(BIGINT(unsigned=True), nullable=True)
+    # Phase 2: folder UUID foreign key (human-readable, string-based)
+    folder_uuid = Column(
+        String(36),
+        ForeignKey("folders.uuid", ondelete="SET NULL"),
+        nullable=True,
+    )
     item_data = Column(JSON, nullable=False)
     custom_fields = Column(JSON, nullable=True)
     password_history = Column(JSON, nullable=True)

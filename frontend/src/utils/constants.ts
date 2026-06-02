@@ -4,6 +4,9 @@ export const ROUTES = {
   VAULT: '/vault',
   DASHBOARD: '/dashboard',
   UNLOCK: '/unlock',
+  FOLDERS: '/folders',
+  GENERATOR: '/generator',
+  TRASH: '/trash',
 } as const;
 
 export const ITEM_TYPES = {

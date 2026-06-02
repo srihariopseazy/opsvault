@@ -22,6 +22,7 @@ def _to_response(item: VaultItem) -> VaultItemResponse:
         notes=item.notes,
         favorite=bool(item.favorite),
         folder_id=str(item.folder_id) if item.folder_id else None,
+        folder_uuid=item.folder_uuid,
         item_data=item.item_data,
         custom_fields=item.custom_fields,
         password_history=item.password_history,
@@ -60,6 +61,7 @@ class VaultService:
             name=data.name,
             notes=data.notes,
             favorite=1 if data.favorite else 0,
+            folder_uuid=data.folder_uuid or None,
             item_data=data.item_data,
             custom_fields=data.custom_fields,
             reprompt=1 if data.reprompt else 0,
@@ -122,6 +124,9 @@ class VaultService:
             item.custom_fields = data.custom_fields
         if data.reprompt is not None:
             item.reprompt = 1 if data.reprompt else 0
+        # folder_uuid: None means leave unchanged; empty string means clear
+        if data.folder_uuid is not None:
+            item.folder_uuid = data.folder_uuid if data.folder_uuid != "" else None
 
         item.revision_date = datetime.now(timezone.utc)
         await db.flush()

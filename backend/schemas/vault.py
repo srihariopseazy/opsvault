@@ -11,6 +11,7 @@ class VaultItemCreate(BaseModel):
     item_data: Any
     custom_fields: Optional[Any] = None
     reprompt: bool = False
+    folder_uuid: Optional[str] = None
 
 
 class VaultItemUpdate(BaseModel):
@@ -20,6 +21,7 @@ class VaultItemUpdate(BaseModel):
     item_data: Optional[Any] = None
     custom_fields: Optional[Any] = None
     reprompt: Optional[bool] = None
+    folder_uuid: Optional[str] = None  # None = leave unchanged; use "" to clear
 
 
 class VaultItemResponse(BaseModel):
@@ -28,7 +30,8 @@ class VaultItemResponse(BaseModel):
     name: str
     notes: Optional[str] = None
     favorite: bool
-    folder_id: Optional[str] = None
+    folder_id: Optional[str] = None   # Phase 1 field kept for compatibility
+    folder_uuid: Optional[str] = None  # Phase 2 folder UUID
     item_data: Any
     custom_fields: Optional[Any] = None
     password_history: Optional[Any] = None
