@@ -21,6 +21,7 @@ export const ROUTES = {
   ADMIN_CONSOLE: '/admin',
   ADMIN_ORG_DETAIL: '/admin/orgs/:uuid',
   POLICY_ENFORCEMENT: '/policy-enforcement',
+  REPORTS: '/reports',
 } as const;
 
 export const ITEM_TYPES = {

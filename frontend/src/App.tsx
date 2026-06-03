@@ -25,6 +25,7 @@ import SendView from './pages/SendView';
 import AdminConsole from './pages/AdminConsole';
 import AdminOrgDetail from './pages/AdminOrgDetail';
 import PolicyEnforcement from './pages/PolicyEnforcement';
+import Reports from './pages/Reports';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -86,6 +87,7 @@ function AppRoutes() {
         <Route path={ROUTES.SEND_ITEMS}        element={<SendItems />} />
         <Route path={ROUTES.ADMIN_CONSOLE}    element={<AdminConsole />} />
         <Route path="/admin/orgs/:uuid"       element={<AdminOrgDetail />} />
+        <Route path={ROUTES.REPORTS}          element={<Reports />} />
       </Route>
 
       {/* Auth required but vault may be locked — policy enforcement */}

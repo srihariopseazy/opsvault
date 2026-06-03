@@ -251,6 +251,30 @@ def _render(template_name: str, ctx: dict) -> tuple[str, str]:
             <p>This is a test message sent from OPSVAULT to confirm your email configuration.</p>
         """)
 
+    elif template_name == "scheduled_report":
+        report_type = ctx.get("report_type", "Report")
+        frequency   = ctx.get("frequency", "")
+        user_name   = ctx.get("user_name", "")
+        summary     = ctx.get("summary", {})
+
+        summary_rows = "".join(
+            f"<tr><td style='padding:6px 12px;color:#9494b8;'>{k.replace('_',' ').title()}</td>"
+            f"<td style='padding:6px 12px;color:#c8c8e0;font-weight:600;'>{v}</td></tr>"
+            for k, v in summary.items() if k != "report_type"
+        )
+        subject = f"Your scheduled {report_type} report is ready"
+        body = _wrap(f"""
+            <h2>Scheduled report: {report_type}</h2>
+            <p>Hi {user_name}, your <span class="highlight">{frequency}</span>
+            {report_type} report has been generated.</p>
+            <div class="meta">
+              <table style="width:100%;border-collapse:collapse;">
+                {summary_rows}
+              </table>
+            </div>
+            <a href="{frontend_url}/reports" class="btn btn-primary">View Full Report</a>
+        """)
+
     else:
         subject = f"OPSVAULT notification: {template_name}"
         body = _wrap(f"<h2>Notification</h2><p>{template_name}</p>")

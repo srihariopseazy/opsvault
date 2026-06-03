@@ -21,6 +21,7 @@ from .platform_event import PlatformEvent, PlatformEventType
 from .smtp_config import SmtpConfig
 from .email_log import EmailLog, EmailStatus
 from .notification_preference import NotificationPreference
+from .report import ScheduledReport, ReportLog, ReportType, ReportFrequency, ReportStatus
 
 __all__ = [
     "User",
@@ -57,4 +58,9 @@ __all__ = [
     "EmailLog",
     "EmailStatus",
     "NotificationPreference",
+    "ScheduledReport",
+    "ReportLog",
+    "ReportType",
+    "ReportFrequency",
+    "ReportStatus",
 ]
