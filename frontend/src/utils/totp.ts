@@ -54,7 +54,7 @@ export async function generateTOTP(secret: string): Promise<string> {
     ['sign'],
   );
 
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, counterBuffer));
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, counterBuffer.buffer as ArrayBuffer));
 
   // Dynamic truncation
   const offset = sig[19] & 0x0f;
