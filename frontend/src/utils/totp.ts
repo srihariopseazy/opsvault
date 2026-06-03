@@ -41,20 +41,25 @@ export async function generateTOTP(secret: string): Promise<string> {
   // 8-byte big-endian counter buffer
   const counterBuffer = new ArrayBuffer(8);
   const view = new DataView(counterBuffer);
-  // High 32 bits (typically 0 for any timestamp in the next century)
   view.setUint32(0, Math.floor(counter / 0x100000000), false);
-  // Low 32 bits
   view.setUint32(4, counter >>> 0, false);
+
+  // Copy keyBytes into a plain ArrayBuffer to satisfy TypeScript strict types
+  const keyBuffer = keyBytes.buffer.slice(
+    keyBytes.byteOffset,
+    keyBytes.byteOffset + keyBytes.byteLength
+  ) as ArrayBuffer;
 
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBuffer,
     { name: 'HMAC', hash: 'SHA-1' },
     false,
     ['sign'],
   );
 
-  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, counterBuffer.buffer as ArrayBuffer));
+  const sigBuffer = await crypto.subtle.sign('HMAC', cryptoKey, counterBuffer);
+  const sig = new Uint8Array(sigBuffer);
 
   // Dynamic truncation
   const offset = sig[19] & 0x0f;
