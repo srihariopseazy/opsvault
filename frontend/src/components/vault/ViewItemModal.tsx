@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { DecryptedVaultItem } from '../../store/slices/vaultSlice';
+import { DecryptedVaultItem, CustomField } from '../../store/slices/vaultSlice';
 import { FolderResponse } from '../../api/foldersApi';
 import { useToast } from '../ui/Toast';
 import { copyToClipboard, getFaviconUrl } from '../../utils/helpers';
@@ -131,6 +131,68 @@ function PasswordHistorySection({ history }: { history: HistoryEntry[] }) {
   );
 }
 
+// ─── Custom fields display ────────────────────────────────────────────────────
+
+function CustomFieldsDisplay({
+  fields,
+  onCopy,
+}: {
+  fields: CustomField[];
+  onCopy: (value: string) => void;
+}) {
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const toggle = (idx: number) =>
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+        Custom fields ({fields.length})
+      </label>
+      <div className="space-y-1.5">
+        {fields.map((field, idx) => (
+          <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase w-14 flex-shrink-0 truncate">
+              {field.name || 'Field'}
+            </span>
+            {field.type === 'boolean' ? (
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-1 ${
+                field.value === 'true' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {field.value === 'true' ? 'Enabled' : 'Disabled'}
+              </span>
+            ) : (
+              <>
+                <span className="flex-1 font-mono text-sm text-gray-700 min-w-0 truncate">
+                  {field.type === 'hidden' && !revealed.has(idx)
+                    ? '••••••••'
+                    : field.value}
+                </span>
+                {field.type === 'hidden' && (
+                  <button type="button" onClick={() => toggle(idx)}
+                    className="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                    {revealed.has(idx) ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                )}
+                {field.value && (
+                  <button type="button" onClick={() => onCopy(field.value)}
+                    className="text-gray-400 hover:text-blue-600 flex-shrink-0">
+                    <CopyIcon />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
 export function ViewItemModal({ open, item, onClose, onEdit, onDelete, onRestore, folders = [] }: Props) {
@@ -156,9 +218,9 @@ export function ViewItemModal({ open, item, onClose, onEdit, onDelete, onRestore
     ? ((item.itemData as Record<string, unknown>).password_history as HistoryEntry[]) || []
     : [];
 
-  // TOTP secret
+  // TOTP secret — prefer the dedicated column, fall back to item_data.totp
   const totpSecret = item.type === 'login'
-    ? ((item.itemData as Record<string, unknown>).totp as string) || ''
+    ? (item.totpSecret || ((item.itemData as Record<string, unknown>).totp as string) || '')
     : '';
 
   return (
@@ -249,6 +311,11 @@ export function ViewItemModal({ open, item, onClose, onEdit, onDelete, onRestore
                 {item.notes}
               </p>
             </div>
+          )}
+
+          {/* Custom fields */}
+          {item.customFields && item.customFields.length > 0 && (
+            <CustomFieldsDisplay fields={item.customFields} onCopy={(v) => handleCopy(v, 'Field')} />
           )}
 
           {/* Password history */}

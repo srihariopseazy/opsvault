@@ -10,7 +10,7 @@ import { vaultApi } from '../api/vaultApi';
 import { authApi } from '../api/authApi';
 import { useToast } from '../components/ui/Toast';
 import { ROUTES } from '../utils/constants';
-import { DecryptedVaultItem } from '../store/slices/vaultSlice';
+import { DecryptedVaultItem, CustomField } from '../store/slices/vaultSlice';
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
@@ -55,6 +55,22 @@ export default function Unlock() {
               const nameStr = await decryptWithKey(item.name, symKey);
               const notesStr = item.notes ? await decryptWithKey(item.notes, symKey) : undefined;
               const dataStr = await decryptWithKey(item.item_data as string, symKey);
+
+              let customFields: CustomField[] | null = null;
+              if (item.custom_fields) {
+                try {
+                  const cfStr = await decryptWithKey(item.custom_fields, symKey);
+                  customFields = JSON.parse(cfStr) as CustomField[];
+                } catch { customFields = null; }
+              }
+
+              let totpSecret: string | undefined;
+              if (item.totp_secret) {
+                try {
+                  totpSecret = await decryptWithKey(item.totp_secret, symKey);
+                } catch { totpSecret = undefined; }
+              }
+
               return {
                 uuid: item.uuid,
                 type: item.type as DecryptedVaultItem['type'],
@@ -63,7 +79,8 @@ export default function Unlock() {
                 favorite: item.favorite,
                 folderId: item.folder_id,
                 itemData: JSON.parse(dataStr),
-                customFields: item.custom_fields,
+                customFields,
+                totpSecret,
                 passwordHistory: item.password_history,
                 reprompt: item.reprompt,
                 deletedAt: item.deleted_at,

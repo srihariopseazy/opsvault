@@ -25,6 +25,7 @@ def _to_response(item: VaultItem) -> VaultItemResponse:
         folder_uuid=item.folder_uuid,
         item_data=item.item_data,
         custom_fields=item.custom_fields,
+        totp_secret=item.totp_secret,
         password_history=item.password_history,
         reprompt=bool(item.reprompt),
         deleted_at=item.deleted_at,
@@ -64,6 +65,7 @@ class VaultService:
             folder_uuid=data.folder_uuid or None,
             item_data=data.item_data,
             custom_fields=data.custom_fields,
+            totp_secret=data.totp_secret,
             reprompt=1 if data.reprompt else 0,
         )
         db.add(item)
@@ -131,6 +133,8 @@ class VaultService:
             item.item_data = data.item_data
         if data.custom_fields is not None:
             item.custom_fields = data.custom_fields
+        if data.totp_secret is not None:
+            item.totp_secret = data.totp_secret
         if data.reprompt is not None:
             item.reprompt = 1 if data.reprompt else 0
         # folder_uuid: None means leave unchanged; empty string means clear

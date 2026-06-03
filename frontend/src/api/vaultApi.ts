@@ -6,8 +6,10 @@ export interface VaultItemPayload {
   notes?: string;
   favorite?: boolean;
   item_data: unknown;
-  custom_fields?: unknown;
+  custom_fields?: string | null;
+  totp_secret?: string | null;
   reprompt?: boolean;
+  folder_id?: string;
 }
 
 export interface VaultItemResponse {
@@ -18,7 +20,8 @@ export interface VaultItemResponse {
   favorite: boolean;
   folder_id?: string;
   item_data: unknown;
-  custom_fields?: unknown;
+  custom_fields?: string | null;
+  totp_secret?: string | null;
   password_history?: unknown;
   reprompt: boolean;
   deleted_at?: string;

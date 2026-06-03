@@ -8,7 +8,6 @@ import {
   addItem,
   updateItem,
   removeItem,
-  setItems,
 } from '../store/slices/vaultSlice';
 import { useCrypto } from '../hooks/useCrypto';
 import { vaultApi } from '../api/vaultApi';
@@ -17,6 +16,7 @@ import { useToast } from '../components/ui/Toast';
 import { getFaviconUrl, getItemSubtitle } from '../utils/helpers';
 import { AddItemModal } from '../components/vault/AddItemModal';
 import { ViewItemModal } from '../components/vault/ViewItemModal';
+import { generateTOTP, getTimeRemaining } from '../utils/totp';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -376,6 +376,52 @@ function SidebarBtn({
   );
 }
 
+// ── TOTP badge (updates every second) ────────────────────────────────────────
+
+function TotpBadge({ secret }: { secret: string }) {
+  const toast = useToast();
+  const [code, setCode] = useState('');
+  const [secsLeft, setSecsLeft] = useState(30);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const c = await generateTOTP(secret);
+      if (!cancelled) { setCode(c); setSecsLeft(getTimeRemaining()); }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [secret]);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(code);
+    toast.success('TOTP code copied');
+  };
+
+  if (!code) return null;
+  const urgent = secsLeft <= 7;
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={`Copy TOTP (${secsLeft}s remaining)`}
+      className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-semibold tabular-nums flex-shrink-0 transition-colors ${
+        urgent
+          ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+          : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+      }`}
+    >
+      {code}
+      <span className={`text-[9px] font-normal ${urgent ? 'text-red-400' : 'text-green-500'}`}>
+        {secsLeft}s
+      </span>
+    </button>
+  );
+}
+
 function ItemCard({
   item, active, onSelect, onToggleFavorite, folders,
 }: {
@@ -432,6 +478,9 @@ function ItemCard({
 
       {/* Badges */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
+        {item.totpSecret && (
+          <TotpBadge secret={item.totpSecret} />
+        )}
         <button
           type="button"
           onClick={(e) => onToggleFavorite(item, e)}

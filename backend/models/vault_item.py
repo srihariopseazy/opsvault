@@ -33,7 +33,8 @@ class VaultItem(Base):
         nullable=True,
     )
     item_data = Column(JSON, nullable=False)
-    custom_fields = Column(JSON, nullable=True)
+    custom_fields = Column(Text, nullable=True)
+    totp_secret = Column(Text, nullable=True)
     password_history = Column(JSON, nullable=True)
     reprompt = Column(TINYINT(1), default=0)
     deleted_at = Column(DateTime, nullable=True)

@@ -1,5 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+export interface CustomField {
+  type: 'text' | 'hidden' | 'boolean';
+  name: string;
+  value: string;
+}
+
 export interface DecryptedVaultItem {
   uuid: string;
   type: 'login' | 'note' | 'card' | 'identity';
@@ -8,7 +14,8 @@ export interface DecryptedVaultItem {
   favorite: boolean;
   folderId?: string;
   itemData: Record<string, unknown>;
-  customFields?: unknown;
+  customFields?: CustomField[] | null;
+  totpSecret?: string;
   passwordHistory?: unknown;
   reprompt: boolean;
   deletedAt?: string;
