@@ -10,6 +10,7 @@ from models.user import User
 from models.emergency_access import EmergencyAccess, EmergencyAccessStatus, EmergencyAccessType
 from schemas.emergency_access import EmergencyAccessResponse
 from services.notification_service import NotificationService
+from config import get_settings as _get_settings
 
 
 def _to_response(ea: EmergencyAccess) -> EmergencyAccessResponse:
@@ -143,6 +144,24 @@ class EmergencyAccessService:
 
         ea.grantor = grantor
         ea.grantee = grantee
+
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=grantee.email,
+                template_name="emergency_access_invite",
+                context={
+                    "grantor_name": grantor.name,
+                    "grantor_email": grantor.email,
+                    "wait_time_days": wait_time_days,
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=grantee.uuid,
+            )
+        except Exception:
+            pass
+
         return _to_response(ea)
 
     @staticmethod
@@ -195,6 +214,21 @@ class EmergencyAccessService:
             body=f"{ea.grantee.name} ({ea.grantee.email}) has accepted your emergency access invite.",
             db=db,
         )
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=ea.grantor.email,
+                template_name="emergency_access_accepted",
+                context={
+                    "grantee_name": ea.grantee.name,
+                    "grantee_email": ea.grantee.email,
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=ea.grantor.uuid,
+            )
+        except Exception:
+            pass
         return _to_response(ea)
 
     @staticmethod
@@ -240,6 +274,23 @@ class EmergencyAccessService:
             ),
             db=db,
         )
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=ea.grantor.email,
+                template_name="emergency_access_initiated",
+                context={
+                    "grantee_name": ea.grantee.name,
+                    "grantee_email": ea.grantee.email,
+                    "wait_time_days": ea.wait_time_days,
+                    "initiated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=ea.grantor.uuid,
+            )
+        except Exception:
+            pass
         return _to_response(ea)
 
     @staticmethod
@@ -265,6 +316,21 @@ class EmergencyAccessService:
             body=f"{ea.grantor.name} has approved your emergency access request.",
             db=db,
         )
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=ea.grantee.email,
+                template_name="emergency_access_approved",
+                context={
+                    "grantor_name": ea.grantor.name,
+                    "access_type": ea.type.value,
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=ea.grantee.uuid,
+            )
+        except Exception:
+            pass
         return _to_response(ea)
 
     @staticmethod
@@ -291,6 +357,20 @@ class EmergencyAccessService:
             body=f"{ea.grantor.name} has rejected your emergency access recovery request.",
             db=db,
         )
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=ea.grantee.email,
+                template_name="emergency_access_rejected",
+                context={
+                    "grantor_name": ea.grantor.name,
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=ea.grantee.uuid,
+            )
+        except Exception:
+            pass
         return _to_response(ea)
 
     @staticmethod

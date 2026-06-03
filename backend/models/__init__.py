@@ -18,6 +18,9 @@ from .notification import Notification
 from .org_policy import OrgPolicy, OrgPolicyType
 from .org_event import OrgEvent, OrgEventType
 from .platform_event import PlatformEvent, PlatformEventType
+from .smtp_config import SmtpConfig
+from .email_log import EmailLog, EmailStatus
+from .notification_preference import NotificationPreference
 
 __all__ = [
     "User",
@@ -50,4 +53,8 @@ __all__ = [
     "OrgEventType",
     "PlatformEvent",
     "PlatformEventType",
+    "SmtpConfig",
+    "EmailLog",
+    "EmailStatus",
+    "NotificationPreference",
 ]

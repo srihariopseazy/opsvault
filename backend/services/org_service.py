@@ -19,6 +19,7 @@ from schemas.organizations import (
     CollectionSummary,
     PendingInviteResponse,
 )
+from config import get_settings as _get_settings
 
 
 # ── Role helpers ──────────────────────────────────────────────────────────────
@@ -333,6 +334,27 @@ class OrgService:
         db.add(new_member)
         await db.flush()
         new_member.user = target
+
+        # Email the invited user
+        org = await _get_org(org_uuid, db)
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=target.email,
+                template_name="org_invite",
+                context={
+                    "org_name": org.name,
+                    "inviter_name": user.name,
+                    "inviter_email": user.email,
+                    "role": role.value,
+                    "frontend_url": _get_settings().FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=target.uuid,
+            )
+        except Exception:
+            pass
+
         return new_member
 
     @staticmethod
@@ -452,6 +474,33 @@ class OrgService:
         invite.status = OrgMemberStatus.accepted
         invite.accepted_at = datetime.now(timezone.utc)
         await db.flush()
+
+        # Email org owner
+        org_res = await db.execute(
+            select(Organization).where(Organization.uuid == invite.org_id)
+        )
+        org = org_res.scalar_one_or_none()
+        if org:
+            owner_res = await db.execute(select(User).where(User.id == org.owner_id))
+            owner = owner_res.scalar_one_or_none()
+            if owner:
+                try:
+                    from services.email_service import send_email
+                    await send_email(
+                        to_email=owner.email,
+                        template_name="org_invite_accepted",
+                        context={
+                            "org_name": org.name,
+                            "member_name": user.name,
+                            "member_email": user.email,
+                            "role": invite.role.value,
+                            "frontend_url": _get_settings().FRONTEND_URL,
+                        },
+                        db=db,
+                        user_uuid=owner.uuid,
+                    )
+                except Exception:
+                    pass
         return invite
 
     @staticmethod
@@ -477,6 +526,32 @@ class OrgService:
             )
         invite.status = OrgMemberStatus.rejected
         await db.flush()
+
+        # Email org owner
+        org_res = await db.execute(
+            select(Organization).where(Organization.uuid == invite.org_id)
+        )
+        org = org_res.scalar_one_or_none()
+        if org:
+            owner_res = await db.execute(select(User).where(User.id == org.owner_id))
+            owner = owner_res.scalar_one_or_none()
+            if owner:
+                try:
+                    from services.email_service import send_email
+                    await send_email(
+                        to_email=owner.email,
+                        template_name="org_invite_rejected",
+                        context={
+                            "org_name": org.name,
+                            "member_name": user.name,
+                            "member_email": user.email,
+                            "frontend_url": _get_settings().FRONTEND_URL,
+                        },
+                        db=db,
+                        user_uuid=owner.uuid,
+                    )
+                except Exception:
+                    pass
         return invite
 
     @staticmethod

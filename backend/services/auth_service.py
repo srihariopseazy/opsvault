@@ -232,6 +232,26 @@ class AuthService:
         user.last_login_at = datetime.now(timezone.utc)
         access_token, refresh_token = await _create_session(user, request, db)
         await _log_event(user.id, request, LoginStatus.success, db)
+
+        # Email alert for unrecognized device (no fingerprint or not trusted)
+        if not await _is_device_trusted(user, data.device_fingerprint, db):
+            try:
+                from services.email_service import send_email
+                await send_email(
+                    to_email=user.email,
+                    template_name="new_device_login",
+                    context={
+                        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                        "ip_address": request.client.host if request.client else "Unknown",
+                        "user_agent": request.headers.get("User-Agent", "Unknown"),
+                        "frontend_url": settings.FRONTEND_URL,
+                    },
+                    db=db,
+                    user_uuid=user.uuid,
+                )
+            except Exception:
+                pass
+
         return _build_auth_response(user, access_token, refresh_token)
 
     @staticmethod
@@ -326,10 +346,26 @@ class AuthService:
         new_master_password_hash: str,
         new_protected_symmetric_key: str,
         db: AsyncSession,
+        request: Optional[Request] = None,
     ) -> None:
         user.master_password_hash = _hash_password(new_master_password_hash)
         user.protected_symmetric_key = new_protected_symmetric_key
         await db.flush()
+        try:
+            from services.email_service import send_email
+            await send_email(
+                to_email=user.email,
+                template_name="master_password_changed",
+                context={
+                    "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                    "ip_address": (request.client.host if request and request.client else "Unknown"),
+                    "frontend_url": settings.FRONTEND_URL,
+                },
+                db=db,
+                user_uuid=user.uuid,
+            )
+        except Exception:
+            pass
 
     # ── TOTP management ──────────────────────────────────────────────────────
 

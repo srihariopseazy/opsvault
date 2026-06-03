@@ -6,6 +6,7 @@ import { clearAuth, updateProtectedSymmetricKey } from '../store/slices/authSlic
 import { lockVault } from '../store/slices/vaultSlice';
 import { authApi } from '../api/authApi';
 import { settingsApi } from '../api/settingsApi';
+import { smtpApi, NotificationPreferences } from '../api/smtpApi';
 import { useToast } from '../components/ui/Toast';
 import { Modal } from '../components/ui/Modal';
 import { ROUTES } from '../utils/constants';
@@ -253,6 +254,91 @@ function TotpSection() {
   );
 }
 
+// ── Notification preferences section ─────────────────────────────────────────
+
+const NOTIF_ITEMS: { key: keyof NotificationPreferences; label: string; description: string }[] = [
+  {
+    key: 'new_device_login',
+    label: 'New device login alerts',
+    description: 'Email me when a login from an unrecognized device is detected',
+  },
+  {
+    key: 'master_password_changed',
+    label: 'Master password change alerts',
+    description: 'Email me when my master password is changed',
+  },
+  {
+    key: 'send_item_viewed',
+    label: 'Send item accessed notifications',
+    description: 'Email me when someone accesses my Send item for the first time',
+  },
+  {
+    key: 'org_invites',
+    label: 'Organization invitation emails',
+    description: 'Email notifications for org invites and responses',
+  },
+  {
+    key: 'emergency_access',
+    label: 'Emergency access emails',
+    description: 'Email alerts for emergency access events',
+  },
+];
+
+function NotificationsSection() {
+  const toast = useToast();
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    smtpApi.getNotifPrefs()
+      .then(({ data }) => setPrefs(data))
+      .catch(() => {});
+  }, []);
+
+  const handleToggle = useCallback(async (key: keyof NotificationPreferences) => {
+    if (!prefs) return;
+    const newVal = !prefs[key];
+    setPrefs((p) => p ? { ...p, [key]: newVal } : p);
+    setSaving(key);
+    try {
+      const { data } = await smtpApi.updateNotifPrefs({ [key]: newVal });
+      setPrefs(data);
+    } catch {
+      setPrefs((p) => p ? { ...p, [key]: !newVal } : p);
+      toast.error('Failed to update preference');
+    } finally {
+      setSaving(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs]);
+
+  if (!prefs) return <p className="text-sm text-gray-400">Loading preferences…</p>;
+
+  return (
+    <div className="space-y-4">
+      {NOTIF_ITEMS.map((item) => (
+        <div key={item.key} className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm font-medium text-gray-700">{item.label}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>
+          </div>
+          <button
+            type="button"
+            disabled={saving === item.key}
+            onClick={() => handleToggle(item.key)}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent
+              transition-colors duration-200 cursor-pointer focus:outline-none disabled:opacity-50 mt-0.5
+              ${prefs[item.key] ? 'bg-blue-600' : 'bg-gray-200'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
+              transition duration-200 ${prefs[item.key] ? 'translate-x-4' : 'translate-x-0'}`} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Settings() {
@@ -445,6 +531,14 @@ export default function Settings() {
             </button>
           </div>
         </div>
+      </Section>
+
+      {/* Email notifications */}
+      <Section title="Email notifications">
+        <p className="text-sm text-gray-500 -mt-1">
+          Control which security events trigger email alerts. These only apply if SMTP is configured by the administrator.
+        </p>
+        <NotificationsSection />
       </Section>
 
       {/* Danger zone */}

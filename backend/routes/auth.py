@@ -81,6 +81,7 @@ async def get_me(
 @router.post("/change-master-password", response_model=MessageResponse)
 async def change_master_password(
     data: ChangeMasterPasswordRequest,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -89,6 +90,7 @@ async def change_master_password(
         data.newMasterPasswordHash,
         data.newProtectedSymmetricKey,
         db,
+        request=request,
     )
     return MessageResponse(message="Master password updated successfully")
 

@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
 import { adminApi, AdminUser, AdminOrg, PlatformEvent, PlatformStats } from '../api/adminApi';
+import { smtpApi, SmtpConfig, SmtpConfigUpdate, EmailLog } from '../api/smtpApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -467,9 +468,263 @@ function EventLogTab() {
   );
 }
 
+// ── Email Settings tab ────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  sent:    'bg-green-100 text-green-700',
+  failed:  'bg-red-100 text-red-600',
+  skipped: 'bg-gray-100 text-gray-500',
+};
+
+function Toggle({
+  checked, onChange, disabled,
+}: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent
+        transition-colors duration-200 cursor-pointer focus:outline-none disabled:opacity-50
+        ${checked ? 'bg-blue-600' : 'bg-gray-200'}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200
+        ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+    </button>
+  );
+}
+
+function EmailSettingsTab() {
+  const toast = useToast();
+  const [cfg, setCfg] = useState<SmtpConfig | null>(null);
+  const [form, setForm] = useState<SmtpConfigUpdate>({});
+  const [saving, setSaving] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [logs, setLogs] = useState<EmailLog[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [logSkip, setLogSkip] = useState(0);
+  const [logStatus, setLogStatus] = useState('');
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  useEffect(() => {
+    smtpApi.getSmtpConfig()
+      .then(({ data }) => { setCfg(data); setForm({}); })
+      .catch(() => toast.error('Failed to load SMTP config'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadLogs = useCallback(async (skip: number, status: string) => {
+    setLogsLoading(true);
+    try {
+      const { data } = await smtpApi.getEmailLogs({
+        status: status || undefined, skip, limit: 50,
+      });
+      setLogs(data.items);
+      setLogsTotal(data.total);
+    } catch {
+      toast.error('Failed to load email logs');
+    } finally {
+      setLogsLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { loadLogs(logSkip, logStatus); }, [loadLogs, logSkip, logStatus]);
+
+  const merge = (patch: SmtpConfigUpdate) => setForm((f) => ({ ...f, ...patch }));
+
+  const val = <K extends keyof SmtpConfig>(key: K): SmtpConfig[K] =>
+    ((form as Record<string, unknown>)[key] !== undefined
+      ? (form as Record<string, unknown>)[key]
+      : cfg
+        ? cfg[key]
+        : undefined) as SmtpConfig[K];
+
+  const handleSave = async () => {
+    if (Object.keys(form).length === 0) return;
+    setSaving(true);
+    try {
+      const { data } = await smtpApi.updateSmtpConfig(form);
+      setCfg(data);
+      setForm({});
+      toast.success('SMTP configuration saved');
+    } catch {
+      toast.error('Failed to save SMTP config');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    if (!testEmail.trim()) { toast.error('Enter a recipient email'); return; }
+    setTesting(true);
+    try {
+      const { data } = await smtpApi.testSmtp(testEmail.trim());
+      if (data.success) toast.success(data.message);
+      else toast.error(data.message);
+    } catch {
+      toast.error('Test failed');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (!cfg) return <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>;
+
+  return (
+    <div className="space-y-8">
+      {/* SMTP Configuration */}
+      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
+        <h3 className="text-base font-semibold text-gray-900 border-b border-gray-100 pb-3">SMTP Configuration</h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Host</label>
+            <input value={val('host') as string} onChange={(e) => merge({ host: e.target.value })}
+              placeholder="smtp.gmail.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+            <input type="number" value={val('port') as number} onChange={(e) => merge({ port: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <input value={val('username') as string} onChange={(e) => merge({ username: e.target.value })}
+              placeholder="user@example.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input type="password" value={(form.password !== undefined ? form.password : '')}
+              onChange={(e) => merge({ password: e.target.value })}
+              placeholder={cfg.password ? '••••••••' : 'Not set'}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
+            <input value={val('from_email') as string} onChange={(e) => merge({ from_email: e.target.value })}
+              placeholder="noreply@opsvault.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Name</label>
+            <input value={val('from_name') as string} onChange={(e) => merge({ from_name: e.target.value })}
+              placeholder="OPSVAULT"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-6 pt-1">
+          <div className="flex items-center gap-3">
+            <Toggle checked={val('use_tls') as boolean} onChange={(v) => merge({ use_tls: v })} />
+            <span className="text-sm text-gray-700">Use TLS (STARTTLS)</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Toggle checked={val('use_ssl') as boolean} onChange={(v) => merge({ use_ssl: v })} />
+            <span className="text-sm text-gray-700">Use SSL</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Toggle checked={val('enabled') as boolean} onChange={(v) => merge({ enabled: v })} />
+            <span className="text-sm text-gray-700">Enable SMTP</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pt-2">
+          <button type="button" onClick={handleSave} disabled={saving || Object.keys(form).length === 0}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors">
+            {saving ? 'Saving…' : 'Save Configuration'}
+          </button>
+        </div>
+
+        {/* Test email */}
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">Send test email</p>
+          <div className="flex gap-2 max-w-sm">
+            <input type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)}
+              placeholder="recipient@example.com"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <button type="button" onClick={handleTest} disabled={testing || !testEmail.trim()}
+              className="bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors whitespace-nowrap">
+              {testing ? 'Sending…' : 'Send Test'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Email Log */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+          <h3 className="text-base font-semibold text-gray-900 flex-1">Email Log</h3>
+          <select value={logStatus} onChange={(e) => { setLogStatus(e.target.value); setLogSkip(0); }}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">All statuses</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="skipped">Skipped</option>
+          </select>
+          <span className="text-xs text-gray-400">{logsTotal} total</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Timestamp</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">To</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Subject</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Template</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {logsLoading ? (
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400">Loading…</td></tr>
+              ) : logs.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-8 text-gray-400">No email logs yet.</td></tr>
+              ) : logs.map((log) => (
+                <tr key={log.uuid} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-700 max-w-[160px] truncate">{log.to_email}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate" title={log.subject}>{log.subject}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{log.template}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase ${STATUS_COLORS[log.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {log.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-red-500 max-w-[180px] truncate" title={log.error_message ?? ''}>
+                    {log.error_message ? log.error_message.split('\n')[0] : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {logsTotal > 50 && (
+          <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
+            {logSkip > 0 && (
+              <button type="button" onClick={() => setLogSkip((p) => Math.max(0, p - 50))}
+                className="text-sm text-blue-600 hover:underline">← Prev</button>
+            )}
+            {logs.length === 50 && (
+              <button type="button" onClick={() => setLogSkip((p) => p + 50)}
+                className="text-sm text-blue-600 hover:underline">Next →</button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'users' | 'organizations' | 'events';
+type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email';
 
 export default function AdminConsole() {
   const navigate = useNavigate();
@@ -494,6 +749,7 @@ export default function AdminConsole() {
     { key: 'users',         label: 'Users' },
     { key: 'organizations', label: 'Organizations' },
     { key: 'events',        label: 'Event Log' },
+    { key: 'email',         label: 'Email Settings' },
   ];
 
   return (
@@ -528,6 +784,7 @@ export default function AdminConsole() {
       {tab === 'users'         && <UsersTab />}
       {tab === 'organizations' && <OrgsTab />}
       {tab === 'events'        && <EventLogTab />}
+      {tab === 'email'         && <EmailSettingsTab />}
     </div>
   );
 }

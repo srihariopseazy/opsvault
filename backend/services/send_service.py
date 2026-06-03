@@ -11,6 +11,7 @@ from sqlalchemy import select, and_
 from models.user import User
 from models.send_item import SendItem, SendItemType
 from schemas.send import SendCreate, SendUpdate, SendResponse, PublicSendResponse
+from config import get_settings as _get_settings
 
 
 def _to_response(s: SendItem) -> SendResponse:
@@ -187,9 +188,31 @@ class SendService:
                     detail="Incorrect password",
                 )
 
-        # Increment access count
+        is_first_access = send.access_count == 0
         send.access_count += 1
         await db.flush()
+
+        # Email owner on first access
+        if is_first_access:
+            owner_res = await db.execute(select(User).where(User.id == send.user_id))
+            owner = owner_res.scalar_one_or_none()
+            if owner:
+                try:
+                    from services.email_service import send_email
+                    await send_email(
+                        to_email=owner.email,
+                        template_name="send_item_viewed",
+                        context={
+                            "send_name": "(encrypted)",
+                            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                            "access_count": send.access_count,
+                            "frontend_url": _get_settings().FRONTEND_URL,
+                        },
+                        db=db,
+                        user_uuid=owner.uuid,
+                    )
+                except Exception:
+                    pass
 
         return PublicSendResponse(
             access_id=send.access_id,
