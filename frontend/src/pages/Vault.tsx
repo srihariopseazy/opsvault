@@ -163,16 +163,6 @@ export default function Vault() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
-  const handlePurgeTrash = useCallback(async () => {
-    try {
-      await vaultApi.purgeTrash();
-      dispatch(setItems(items.filter((i) => !i.deletedAt)));
-      toast.success('Trash emptied');
-    } catch {
-      toast.error('Failed to empty trash');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, dispatch]);
 
   // Unused but kept for backward compatibility with any external callers
   const handlePermanentDelete = useCallback(async (item: DecryptedVaultItem) => {
@@ -228,11 +218,7 @@ export default function Vault() {
               window.history.replaceState({}, '', window.location.pathname);
             }}
           />
-          <SidebarBtn
-            label="Trash"
-            active={false}
-            onClick={() => { window.location.href = '/trash'; }}
-          />
+       
 
           {/* Inline folder list */}
           {folders.length > 0 && (
@@ -296,15 +282,7 @@ export default function Vault() {
             Add item
           </button>
 
-          {/* Empty trash shortcut — only when in trash-like state */}
-          {section === 'all' && items.some((i) => i.deletedAt) && (
-            <button
-              onClick={handlePurgeTrash}
-              className="text-xs text-red-500 border border-red-200 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
-            >
-              Empty trash
-            </button>
-          )}
+       
         </div>
 
         {/* Section heading */}
