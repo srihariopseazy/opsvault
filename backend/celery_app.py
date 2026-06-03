@@ -8,7 +8,7 @@ celery_app = Celery(
     "opsvault",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.email_tasks", "tasks.report_tasks"],
+    include=["tasks.email_tasks", "tasks.report_tasks", "tasks.webhook_tasks"],
 )
 
 celery_app.conf.update(

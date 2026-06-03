@@ -4,6 +4,7 @@ import { orgsApi, OrgDetail as OrgDetailData, OrgMemberInfo } from '../api/orgsA
 import { collectionsApi } from '../api/collectionsApi';
 import { orgPoliciesApi, OrgPolicy } from '../api/orgPoliciesApi';
 import { orgEventsApi, OrgEvent } from '../api/orgEventsApi';
+import { webhooksApi, WebhookResponse, WebhookCreate, WebhookWithSecretResponse, EVENT_GROUPS } from '../api/webhooksApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -360,9 +361,221 @@ function OrgEventLogTab({ orgUuid }: { orgUuid: string }) {
   );
 }
 
+// ── Org Webhooks tab ──────────────────────────────────────────────────────────
+
+function OrgWebhooksTab({ orgUuid }: { orgUuid: string }) {
+  const toast = useToast();
+  const [webhooks, setWebhooks] = useState<WebhookResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [revealSecret, setRevealSecret] = useState<string | null>(null);
+
+  // form state
+  const [newName, setNewName] = useState('');
+  const [newUrl, setNewUrl] = useState('');
+  const [newEvents, setNewEvents] = useState<string[]>([]);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await webhooksApi.listOrgWebhooks(orgUuid);
+      setWebhooks(data);
+    } catch {
+      toast.error('Failed to load webhooks');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgUuid]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName.trim() || !newUrl.trim() || newEvents.length === 0) {
+      toast.error('Name, URL, and at least one event are required');
+      return;
+    }
+    try {
+      const { data } = await webhooksApi.createOrgWebhook(orgUuid, {
+        name: newName.trim(),
+        url: newUrl.trim(),
+        events: newEvents,
+      } as WebhookCreate);
+      setRevealSecret((data as WebhookWithSecretResponse).secret);
+      setShowCreate(false);
+      setNewName(''); setNewUrl(''); setNewEvents([]);
+      load();
+    } catch {
+      toast.error('Failed to create webhook');
+    }
+  };
+
+  const handleTest = async (wh: WebhookResponse) => {
+    try {
+      await webhooksApi.testOrgWebhook(orgUuid, wh.uuid);
+      toast.success('Test ping enqueued');
+    } catch {
+      toast.error('Failed to send test');
+    }
+  };
+
+  const handleDelete = async (wh: WebhookResponse) => {
+    if (!confirm(`Delete webhook "${wh.name}"?`)) return;
+    try {
+      await webhooksApi.deleteOrgWebhook(orgUuid, wh.uuid);
+      toast.success('Webhook deleted');
+      load();
+    } catch {
+      toast.error('Failed to delete webhook');
+    }
+  };
+
+  const toggleEvent = (ev: string) =>
+    setNewEvents((prev) =>
+      prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]
+    );
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button type="button" onClick={() => setShowCreate(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          + New Webhook
+        </button>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">URL</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Events</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {webhooks.length === 0 ? (
+              <tr><td colSpan={4} className="text-center py-8 text-gray-400">No webhooks yet.</td></tr>
+            ) : webhooks.map((wh) => (
+              <tr key={wh.uuid} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900">{wh.name}</td>
+                <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate" title={wh.url}>{wh.url}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {wh.events.slice(0, 3).map((e) => (
+                      <span key={e} className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                        {e.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                    {wh.events.length > 3 && (
+                      <span className="text-[10px] text-gray-400">+{wh.events.length - 3}</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => handleTest(wh)}
+                      className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 px-2 py-1 rounded transition-colors">
+                      Test
+                    </button>
+                    <button type="button" onClick={() => handleDelete(wh)}
+                      className="text-xs text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded transition-colors">
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Create dialog */}
+      {showCreate && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowCreate(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-base font-semibold text-gray-900 mb-4">New Org Webhook</h2>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input value={newName} onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. CI notifications"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Endpoint URL</label>
+                <input type="url" value={newUrl} onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="https://hooks.example.com/webhook"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Events</label>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {EVENT_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">{group.label}</p>
+                      <div className="grid grid-cols-1 gap-1 pl-2">
+                        {group.events.map((ev) => (
+                          <label key={ev} className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={newEvents.includes(ev)} onChange={() => toggleEvent(ev)}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            <span className="text-sm text-gray-700">{ev.replace(/_/g, ' ')}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowCreate(false)}
+                  className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Secret reveal */}
+      {revealSecret && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setRevealSecret(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 space-y-4">
+            <h2 className="text-base font-semibold text-gray-900">Webhook secret</h2>
+            <p className="text-sm text-amber-700 font-medium">Store this to verify incoming signatures.</p>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 font-mono text-xs text-gray-800 break-all select-all">
+              {revealSecret}
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={async () => { await navigator.clipboard.writeText(revealSecret); toast.success('Copied'); }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                Copy
+              </button>
+              <button type="button" onClick={() => setRevealSecret(null)}
+                className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'members' | 'collections' | 'policies' | 'events';
+type Tab = 'members' | 'collections' | 'policies' | 'events' | 'webhooks';
 
 export default function OrgDetail() {
   const { uuid } = useParams<{ uuid: string }>();
@@ -486,7 +699,7 @@ export default function OrgDetail() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
-        {(['members', 'collections', ...(isAdmin ? (['policies', 'events'] as Tab[]) : [])] as Tab[]).map((t) => (
+        {(['members', 'collections', ...(isAdmin ? (['policies', 'events', 'webhooks'] as Tab[]) : [])] as Tab[]).map((t) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
               tab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -587,6 +800,11 @@ export default function OrgDetail() {
       {/* ── Event Log tab ─────────────────────────────────────────────────────── */}
       {tab === 'events' && isAdmin && uuid && (
         <OrgEventLogTab orgUuid={uuid} />
+      )}
+
+      {/* ── Webhooks tab ──────────────────────────────────────────────────────── */}
+      {tab === 'webhooks' && isAdmin && uuid && (
+        <OrgWebhooksTab orgUuid={uuid} />
       )}
 
       <InviteModal

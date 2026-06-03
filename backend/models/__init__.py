@@ -23,6 +23,7 @@ from .email_log import EmailLog, EmailStatus
 from .notification_preference import NotificationPreference
 from .report import ScheduledReport, ReportLog, ReportType, ReportFrequency, ReportStatus
 from .api_key import ApiKey, OrgApiKey
+from .webhook import Webhook, WebhookDelivery
 
 __all__ = [
     "User",
@@ -66,4 +67,6 @@ __all__ = [
     "ReportStatus",
     "ApiKey",
     "OrgApiKey",
+    "Webhook",
+    "WebhookDelivery",
 ]

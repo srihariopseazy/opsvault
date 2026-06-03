@@ -23,6 +23,7 @@ export const ROUTES = {
   POLICY_ENFORCEMENT: '/policy-enforcement',
   REPORTS: '/reports',
   API_KEYS: '/api-keys',
+  WEBHOOKS: '/webhooks',
 } as const;
 
 export const ITEM_TYPES = {

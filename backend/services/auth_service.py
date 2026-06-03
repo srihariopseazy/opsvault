@@ -204,6 +204,11 @@ class AuthService:
             # Log failure only when we can identify the user
             if user:
                 await _log_event(user.id, request, LoginStatus.failed, db)
+                try:
+                    from services.webhook_service import trigger_event
+                    await trigger_event(db, user.id, None, "login_failed", {"email": user.email})
+                except Exception:
+                    pass
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or master password",
@@ -232,6 +237,11 @@ class AuthService:
         user.last_login_at = datetime.now(timezone.utc)
         access_token, refresh_token = await _create_session(user, request, db)
         await _log_event(user.id, request, LoginStatus.success, db)
+        try:
+            from services.webhook_service import trigger_event
+            await trigger_event(db, user.id, None, "login_success", {"email": user.email})
+        except Exception:
+            pass
 
         # Email alert for unrecognized device (no fingerprint or not trusted)
         if not await _is_device_trusted(user, data.device_fingerprint, db):

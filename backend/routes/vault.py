@@ -12,6 +12,7 @@ from schemas.vault import (
 )
 from schemas.common import MessageResponse
 from services.vault_service import VaultService
+from services.webhook_service import trigger_event
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 
@@ -30,7 +31,12 @@ async def create_item(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await VaultService.create_item(current_user, data, db)
+    item = await VaultService.create_item(current_user, data, db)
+    try:
+        await trigger_event(db, current_user.id, None, "vault_item_created", {"uuid": item.uuid})
+    except Exception:
+        pass
+    return item
 
 
 @router.get("/items", response_model=List[VaultItemResponse])
@@ -57,7 +63,12 @@ async def update_item(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await VaultService.update_item(current_user, uuid, data, db)
+    item = await VaultService.update_item(current_user, uuid, data, db)
+    try:
+        await trigger_event(db, current_user.id, None, "vault_item_updated", {"uuid": uuid})
+    except Exception:
+        pass
+    return item
 
 
 @router.delete("/items/{uuid}", response_model=MessageResponse)
@@ -67,6 +78,10 @@ async def soft_delete_item(
     db: AsyncSession = Depends(get_db),
 ):
     await VaultService.soft_delete(current_user, uuid, db)
+    try:
+        await trigger_event(db, current_user.id, None, "vault_item_deleted", {"uuid": uuid})
+    except Exception:
+        pass
     return MessageResponse(message="Item moved to trash")
 
 
