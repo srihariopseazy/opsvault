@@ -26,6 +26,7 @@ export const ROUTES = {
   WEBHOOKS: '/webhooks',
   SSO_CALLBACK: '/sso/callback',
   DIRECTORY_SYNC: '/directory-sync',
+  DEVICES: '/devices',
 } as const;
 
 export const ITEM_TYPES = {

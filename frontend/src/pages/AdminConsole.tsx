@@ -6,6 +6,7 @@ import { adminApi, AdminUser, AdminOrg, PlatformEvent, PlatformStats } from '../
 import { smtpApi, SmtpConfig, SmtpConfigUpdate, EmailLog } from '../api/smtpApi';
 import { apiKeysApi, AdminOrgApiKey } from '../api/apiKeysApi';
 import { ssoApi, SsoConfigResponse } from '../api/ssoApi';
+import { devicesApi, AdminDeviceResponse } from '../api/devicesApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -997,9 +998,159 @@ function AdminSsoTab() {
   );
 }
 
+// ── Admin Devices tab ─────────────────────────────────────────────────────────
+
+const DEVICE_STATUS_COLORS: Record<string, string> = {
+  active:  'bg-green-100 text-green-700',
+  wiped:   'bg-red-100 text-red-600',
+  revoked: 'bg-orange-100 text-orange-600',
+};
+
+function AdminDevicesTab() {
+  const toast = useToast();
+  const [devices, setDevices] = useState<AdminDeviceResponse[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [confirm, setConfirm] = useState<{ msg: string; fn: () => Promise<void> } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await devicesApi.adminListAllDevices();
+      setDevices(data);
+    } catch {
+      toast.error('Failed to load devices');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const visible = devices.filter((d) => {
+    const matchStatus = !statusFilter || d.status === statusFilter;
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      (d.user_email || '').toLowerCase().includes(q) ||
+      (d.device_name || '').toLowerCase().includes(q);
+    return matchStatus && matchSearch;
+  });
+
+  const handleAdminWipe = (d: AdminDeviceResponse) => {
+    setConfirm({
+      msg: `Wipe device "${d.device_name || 'unknown'}" owned by ${d.user_email}? This invalidates all their sessions.`,
+      fn: async () => {
+        await devicesApi.adminWipeDevice(d.uuid);
+        toast.success('Device wiped');
+        await load();
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="search"
+          placeholder="Search by user email or device name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 min-w-48 max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="wiped">Wiped</option>
+          <option value="revoked">Revoked</option>
+        </select>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">User</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Device</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Browser / OS</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">IP</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Seen</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Trusted</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading ? (
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">Loading…</td></tr>
+            ) : visible.length === 0 ? (
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">No devices found.</td></tr>
+            ) : visible.map((d) => (
+              <tr key={d.uuid} className={`hover:bg-gray-50 ${d.status !== 'active' ? 'opacity-60' : ''}`}>
+                <td className="px-4 py-3">
+                  <p className="text-xs font-medium text-gray-900 truncate max-w-[160px]">{d.user_email}</p>
+                  <p className="text-[10px] text-gray-400 truncate max-w-[160px]">{d.user_name}</p>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-700 max-w-[140px] truncate">
+                  {d.device_name || '—'}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  <div>{d.browser || '—'}</div>
+                  <div className="text-gray-400">{d.os || ''}</div>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">{d.last_seen_ip || d.ip_address || '—'}</td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {d.last_used_at ? new Date(d.last_used_at).toLocaleDateString() : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${
+                    DEVICE_STATUS_COLORS[d.status] ?? 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {d.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    d.is_trusted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {d.is_trusted ? 'Yes' : 'No'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {d.status === 'active' && (
+                    <button
+                      type="button"
+                      onClick={() => handleAdminWipe(d)}
+                      className="text-xs text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                    >
+                      Wipe
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmDialog
+        open={!!confirm}
+        message={confirm?.msg ?? ''}
+        onConfirm={async () => { if (confirm) { await confirm.fn(); } setConfirm(null); }}
+        onCancel={() => setConfirm(null)}
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email' | 'apikeys' | 'sso';
+type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email' | 'apikeys' | 'sso' | 'devices';
 
 export default function AdminConsole() {
   const navigate = useNavigate();
@@ -1027,6 +1178,7 @@ export default function AdminConsole() {
     { key: 'email',         label: 'Email Settings' },
     { key: 'apikeys',       label: 'API Keys' },
     { key: 'sso',           label: 'SSO' },
+    { key: 'devices',       label: 'Devices' },
   ];
 
   return (
@@ -1064,6 +1216,7 @@ export default function AdminConsole() {
       {tab === 'email'         && <EmailSettingsTab />}
       {tab === 'apikeys'       && <AdminApiKeysTab />}
       {tab === 'sso'           && <AdminSsoTab />}
+      {tab === 'devices'       && <AdminDevicesTab />}
     </div>
   );
 }

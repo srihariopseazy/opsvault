@@ -30,6 +30,7 @@ import ApiKeys from './pages/ApiKeys';
 import Webhooks from './pages/Webhooks';
 import SsoCallback from './pages/SsoCallback';
 import DirectorySync from './pages/DirectorySync';
+import Devices from './pages/Devices';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path={ROUTES.API_KEYS}         element={<ApiKeys />} />
         <Route path={ROUTES.WEBHOOKS}         element={<Webhooks />} />
         <Route path={ROUTES.DIRECTORY_SYNC}   element={<DirectorySync />} />
+        <Route path={ROUTES.DEVICES}          element={<Devices />} />
       </Route>
 
       {/* Auth required but vault may be locked — policy enforcement */}

@@ -5,6 +5,7 @@ from .audit_log import AuditLog
 from .rate_limit import RateLimitAttempt
 from .folder import Folder
 from .trusted_device import TrustedDevice
+from .device import Device, DeviceStatus
 from .login_event import LoginEvent, LoginStatus
 from .organization import Organization
 from .org_member import OrgMember, OrgMemberRole, OrgMemberStatus
@@ -38,6 +39,8 @@ __all__ = [
     "RateLimitAttempt",
     "Folder",
     "TrustedDevice",
+    "Device",
+    "DeviceStatus",
     "LoginEvent",
     "LoginStatus",
     "Organization",
