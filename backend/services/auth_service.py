@@ -74,6 +74,7 @@ def _build_auth_response(user: User, access_token: str, refresh_token: str) -> A
             email=user.email,
             name=user.name,
             totp_enabled=bool(user.totp_enabled),
+            is_superuser=bool(user.is_superuser),
         ),
         protected_symmetric_key=user.protected_symmetric_key,
         kdf_iterations=user.kdf_iterations,

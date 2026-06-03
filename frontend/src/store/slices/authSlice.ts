@@ -4,6 +4,8 @@ export interface AuthUser {
   uuid: string;
   email: string;
   name: string;
+  totp_enabled?: boolean;
+  is_superuser?: boolean;
 }
 
 interface AuthState {

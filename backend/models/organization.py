@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, func
-from sqlalchemy.dialects.mysql import BIGINT
+from sqlalchemy.dialects.mysql import BIGINT, TINYINT
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -15,6 +15,8 @@ class Organization(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Phase 7: admin can suspend an org
+    is_suspended = Column(TINYINT(1), default=0, nullable=False)
     created_at = Column(DateTime, default=func.now())
 
     # Relationships

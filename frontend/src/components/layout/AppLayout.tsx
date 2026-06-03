@@ -1,8 +1,10 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
+import { usePolicyEnforcement } from '../../hooks/usePolicyEnforcement';
 
 export function AppLayout() {
+  usePolicyEnforcement();
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       <TopNav />

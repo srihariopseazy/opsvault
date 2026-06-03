@@ -46,6 +46,7 @@ export default function Vault() {
   const toast = useToast();
   const { symmetricKey } = useCrypto();
   const items = useSelector((s: RootState) => s.vault.items);
+  const personalVaultDisabled = useSelector((s: RootState) => s.ui?.personalVaultDisabled ?? false);
   const [searchParams] = useSearchParams();
 
   // State
@@ -248,6 +249,15 @@ export default function Vault() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Policy banner */}
+        {personalVaultDisabled && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-amber-800">Personal vault is disabled by your organization policy.</p>
+          </div>
+        )}
         {/* Top bar */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 bg-white flex-wrap">
           {/* Search */}

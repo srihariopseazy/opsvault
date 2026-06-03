@@ -22,6 +22,9 @@ import CollectionDetail from './pages/CollectionDetail';
 import EmergencyAccess from './pages/EmergencyAccess';
 import SendItems from './pages/SendItems';
 import SendView from './pages/SendView';
+import AdminConsole from './pages/AdminConsole';
+import AdminOrgDetail from './pages/AdminOrgDetail';
+import PolicyEnforcement from './pages/PolicyEnforcement';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -81,7 +84,19 @@ function AppRoutes() {
         <Route path="/organizations/:uuid/collections/:colUuid" element={<CollectionDetail />} />
         <Route path={ROUTES.EMERGENCY_ACCESS} element={<EmergencyAccess />} />
         <Route path={ROUTES.SEND_ITEMS}        element={<SendItems />} />
+        <Route path={ROUTES.ADMIN_CONSOLE}    element={<AdminConsole />} />
+        <Route path="/admin/orgs/:uuid"       element={<AdminOrgDetail />} />
       </Route>
+
+      {/* Auth required but vault may be locked — policy enforcement */}
+      <Route
+        path={ROUTES.POLICY_ENFORCEMENT}
+        element={
+          <RequireAuth>
+            <PolicyEnforcement />
+          </RequireAuth>
+        }
+      />
 
       {/* Public send view — no auth required */}
       <Route path="/send/:accessId" element={<SendView />} />

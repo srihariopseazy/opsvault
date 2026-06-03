@@ -17,6 +17,9 @@ from routes.emergency_access import router as emergency_access_router
 from routes.send import router as send_router
 from routes.generator_history import router as generator_history_router
 from routes.notifications import router as notifications_router
+from routes.admin import router as admin_router
+from routes.org_policies import router as org_policies_router
+from routes.org_events import router as org_events_router
 
 
 @asynccontextmanager
@@ -54,3 +57,6 @@ app.include_router(emergency_access_router,  prefix=API_PREFIX)
 app.include_router(send_router,              prefix=API_PREFIX)
 app.include_router(generator_history_router, prefix=API_PREFIX)
 app.include_router(notifications_router,     prefix=API_PREFIX)
+app.include_router(admin_router,             prefix=API_PREFIX)
+app.include_router(org_policies_router,      prefix=API_PREFIX)
+app.include_router(org_events_router,        prefix=API_PREFIX)

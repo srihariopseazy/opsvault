@@ -18,6 +18,9 @@ export const ROUTES = {
   EMERGENCY_ACCESS: '/emergency-access',
   SEND_ITEMS: '/send-items',
   SEND_VIEW: '/send/:accessId',
+  ADMIN_CONSOLE: '/admin',
+  ADMIN_ORG_DETAIL: '/admin/orgs/:uuid',
+  POLICY_ENFORCEMENT: '/policy-enforcement',
 } as const;
 
 export const ITEM_TYPES = {

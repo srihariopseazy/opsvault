@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { orgsApi, OrgDetail as OrgDetailData, OrgMemberInfo } from '../api/orgsApi';
 import { collectionsApi } from '../api/collectionsApi';
+import { orgPoliciesApi, OrgPolicy } from '../api/orgPoliciesApi';
+import { orgEventsApi, OrgEvent } from '../api/orgEventsApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -127,9 +129,240 @@ function CreateCollectionModal({
   );
 }
 
+// ── Policy descriptions ───────────────────────────────────────────────────────
+
+const POLICY_META: Record<string, { label: string; description: string }> = {
+  two_factor_authentication: {
+    label: 'Two-Factor Authentication',
+    description: 'Require all members to use 2FA',
+  },
+  master_password_strength: {
+    label: 'Master Password Strength',
+    description: 'Enforce minimum password strength',
+  },
+  single_org: {
+    label: 'Single Organization',
+    description: 'Prevent members from joining other organizations',
+  },
+  personal_vault_disabled: {
+    label: 'Personal Vault Disabled',
+    description: 'Prevent members from using personal vault',
+  },
+  send_disabled: {
+    label: 'Send Disabled',
+    description: 'Prevent members from creating Send items',
+  },
+  max_vault_timeout: {
+    label: 'Max Vault Timeout',
+    description: 'Set maximum vault auto-lock timeout',
+  },
+};
+
+const STRENGTH_LABELS: Record<number, string> = {
+  1: 'Weak',
+  2: 'Fair',
+  3: 'Strong',
+  4: 'Very Strong',
+};
+
+// ── Policies tab ──────────────────────────────────────────────────────────────
+
+function PoliciesTab({ orgUuid }: { orgUuid: string }) {
+  const toast = useToast();
+  const [policies, setPolicies] = useState<OrgPolicy[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  useEffect(() => {
+    orgPoliciesApi.getPolicies(orgUuid)
+      .then(({ data }) => setPolicies(data.policies))
+      .catch(() => toast.error('Failed to load policies'))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgUuid]);
+
+  const handleToggle = useCallback(async (policy: OrgPolicy) => {
+    const newEnabled = !policy.enabled;
+    setSaving(policy.policy_type);
+    try {
+      const { data } = await orgPoliciesApi.setPolicy(
+        orgUuid,
+        policy.policy_type,
+        newEnabled,
+        newEnabled ? policy.policy_data : null,
+      );
+      setPolicies((prev) => prev.map((p) => p.policy_type === policy.policy_type ? data : p));
+      toast.success(`Policy ${newEnabled ? 'enabled' : 'disabled'}`);
+    } catch {
+      toast.error('Failed to update policy');
+    } finally {
+      setSaving(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgUuid]);
+
+  const handlePolicyData = useCallback(async (policy: OrgPolicy, policyData: Record<string, unknown>) => {
+    setSaving(policy.policy_type);
+    try {
+      const { data } = await orgPoliciesApi.setPolicy(orgUuid, policy.policy_type, policy.enabled, policyData);
+      setPolicies((prev) => prev.map((p) => p.policy_type === policy.policy_type ? data : p));
+    } catch {
+      toast.error('Failed to update policy config');
+    } finally {
+      setSaving(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgUuid]);
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>;
+
+  return (
+    <div className="space-y-3">
+      {policies.map((policy) => {
+        const meta = POLICY_META[policy.policy_type] ?? { label: policy.policy_type, description: '' };
+        const isSaving = saving === policy.policy_type;
+        return (
+          <div key={policy.policy_type} className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-900">{meta.label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{meta.description}</p>
+              </div>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => handleToggle(policy)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer focus:outline-none ${
+                  policy.enabled ? 'bg-blue-600' : 'bg-gray-200'
+                } disabled:opacity-50`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                  policy.enabled ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+
+            {/* Inline config when enabled */}
+            {policy.enabled && policy.policy_type === 'master_password_strength' && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Minimum strength</label>
+                <select
+                  value={policy.policy_data?.min_strength as number ?? 3}
+                  onChange={(e) => handlePolicyData(policy, { min_strength: Number(e.target.value) })}
+                  disabled={isSaving}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {[1, 2, 3, 4].map((v) => (
+                    <option key={v} value={v}>{v} — {STRENGTH_LABELS[v]}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {policy.enabled && policy.policy_type === 'max_vault_timeout' && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Timeout (minutes)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10080}
+                  defaultValue={policy.policy_data?.timeout_minutes as number ?? 30}
+                  onBlur={(e) => handlePolicyData(policy, { timeout_minutes: Number(e.target.value) })}
+                  disabled={isSaving}
+                  className="w-28 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Org Event Log tab ─────────────────────────────────────────────────────────
+
+function OrgEventLogTab({ orgUuid }: { orgUuid: string }) {
+  const toast = useToast();
+  const [events, setEvents] = useState<OrgEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [skip, setSkip] = useState(0);
+  const limit = 20;
+
+  const load = useCallback(async (offset: number, replace: boolean) => {
+    if (offset === 0) setLoading(true);
+    try {
+      const { data } = await orgEventsApi.getOrgEvents(orgUuid, { skip: offset, limit });
+      if (replace) {
+        setEvents(data);
+      } else {
+        setEvents((prev) => [...prev, ...data]);
+      }
+    } catch {
+      toast.error('Failed to load events');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgUuid]);
+
+  useEffect(() => { load(0, true); }, [load]);
+
+  const handleLoadMore = () => {
+    const newSkip = skip + limit;
+    setSkip(newSkip);
+    load(newSkip, false);
+  };
+
+  if (loading) return <div className="text-center py-8 text-gray-400 text-sm">Loading…</div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {events.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-gray-400">No events yet.</div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {events.map((e) => (
+              <div key={e.uuid} className="flex items-start gap-3 px-5 py-3.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 uppercase tracking-wide">
+                      {e.event_type.replace(/_/g, ' ')}
+                    </span>
+                    {e.actor_email && (
+                      <span className="text-xs text-gray-500">by {e.actor_email}</span>
+                    )}
+                  </div>
+                  {e.event_data && Object.keys(e.event_data).length > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">
+                      {JSON.stringify(e.event_data)}
+                    </p>
+                  )}
+                </div>
+                <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                  {e.created_at ? new Date(e.created_at).toLocaleString() : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {events.length > 0 && events.length % limit === 0 && (
+        <div className="flex justify-center">
+          <button type="button" onClick={handleLoadMore}
+            className="text-sm text-blue-600 border border-blue-200 hover:bg-blue-50 px-4 py-2 rounded-lg transition-colors">
+            Load more
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'members' | 'collections';
+type Tab = 'members' | 'collections' | 'policies' | 'events';
 
 export default function OrgDetail() {
   const { uuid } = useParams<{ uuid: string }>();
@@ -252,13 +485,13 @@ export default function OrgDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-        {(['members', 'collections'] as Tab[]).map((t) => (
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit flex-wrap">
+        {(['members', 'collections', ...(isAdmin ? (['policies', 'events'] as Tab[]) : [])] as Tab[]).map((t) => (
           <button key={t} type="button" onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
               tab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}>
-            {t}
+            {t === 'events' ? 'Event Log' : t}
           </button>
         ))}
       </div>
@@ -344,6 +577,16 @@ export default function OrgDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Policies tab ──────────────────────────────────────────────────────── */}
+      {tab === 'policies' && isAdmin && uuid && (
+        <PoliciesTab orgUuid={uuid} />
+      )}
+
+      {/* ── Event Log tab ─────────────────────────────────────────────────────── */}
+      {tab === 'events' && isAdmin && uuid && (
+        <OrgEventLogTab orgUuid={uuid} />
       )}
 
       <InviteModal

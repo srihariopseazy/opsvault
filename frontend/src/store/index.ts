@@ -1,6 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
 import vaultReducer from './slices/vaultSlice';
+import uiReducer from './slices/uiSlice';
 
 // symmetricKey is now a plain base64 string (crypto-js), so no serializable
 // check overrides are needed — Redux can handle it without special configuration.
@@ -8,6 +9,7 @@ export const store = configureStore({
   reducer: {
     auth: authReducer,
     vault: vaultReducer,
+    ui: uiReducer,
   },
 });
 

@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     totp_enabled: bool = False
+    is_superuser: bool = False
 
 
 class AuthResponse(BaseModel):
