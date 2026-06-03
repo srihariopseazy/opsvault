@@ -26,6 +26,7 @@ import AdminConsole from './pages/AdminConsole';
 import AdminOrgDetail from './pages/AdminOrgDetail';
 import PolicyEnforcement from './pages/PolicyEnforcement';
 import Reports from './pages/Reports';
+import ApiKeys from './pages/ApiKeys';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -88,6 +89,7 @@ function AppRoutes() {
         <Route path={ROUTES.ADMIN_CONSOLE}    element={<AdminConsole />} />
         <Route path="/admin/orgs/:uuid"       element={<AdminOrgDetail />} />
         <Route path={ROUTES.REPORTS}          element={<Reports />} />
+        <Route path={ROUTES.API_KEYS}         element={<ApiKeys />} />
       </Route>
 
       {/* Auth required but vault may be locked — policy enforcement */}

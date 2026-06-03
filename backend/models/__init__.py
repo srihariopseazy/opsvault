@@ -22,6 +22,7 @@ from .smtp_config import SmtpConfig
 from .email_log import EmailLog, EmailStatus
 from .notification_preference import NotificationPreference
 from .report import ScheduledReport, ReportLog, ReportType, ReportFrequency, ReportStatus
+from .api_key import ApiKey, OrgApiKey
 
 __all__ = [
     "User",
@@ -63,4 +64,6 @@ __all__ = [
     "ReportType",
     "ReportFrequency",
     "ReportStatus",
+    "ApiKey",
+    "OrgApiKey",
 ]

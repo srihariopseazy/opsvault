@@ -23,6 +23,8 @@ from routes.org_events import router as org_events_router
 from routes.smtp_config import router as smtp_config_router
 from routes.notification_preferences import router as notif_prefs_router
 from routes.reports import router as reports_router
+from routes.api_keys import router as api_keys_router
+from routes.org_api_keys import router as org_api_keys_router
 
 
 @asynccontextmanager
@@ -66,3 +68,5 @@ app.include_router(org_events_router,        prefix=API_PREFIX)
 app.include_router(smtp_config_router,       prefix=API_PREFIX)
 app.include_router(notif_prefs_router,       prefix=API_PREFIX)
 app.include_router(reports_router,           prefix=API_PREFIX)
+app.include_router(api_keys_router,          prefix=API_PREFIX)
+app.include_router(org_api_keys_router,      prefix=API_PREFIX)

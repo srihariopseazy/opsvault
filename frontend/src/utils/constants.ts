@@ -22,6 +22,7 @@ export const ROUTES = {
   ADMIN_ORG_DETAIL: '/admin/orgs/:uuid',
   POLICY_ENFORCEMENT: '/policy-enforcement',
   REPORTS: '/reports',
+  API_KEYS: '/api-keys',
 } as const;
 
 export const ITEM_TYPES = {

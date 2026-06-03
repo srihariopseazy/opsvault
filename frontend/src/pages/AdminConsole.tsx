@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
 import { adminApi, AdminUser, AdminOrg, PlatformEvent, PlatformStats } from '../api/adminApi';
 import { smtpApi, SmtpConfig, SmtpConfigUpdate, EmailLog } from '../api/smtpApi';
+import { apiKeysApi, AdminOrgApiKey } from '../api/apiKeysApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -722,9 +723,114 @@ function EmailSettingsTab() {
   );
 }
 
+// ── Admin API Keys tab ────────────────────────────────────────────────────────
+
+function AdminApiKeysTab() {
+  const toast = useToast();
+  const [keys, setKeys] = useState<AdminOrgApiKey[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [confirm, setConfirm] = useState<{ msg: string; fn: () => Promise<void> } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiKeysApi.adminListAllOrgKeys();
+      setKeys(data);
+    } catch {
+      toast.error('Failed to load org API keys');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleRevoke = (orgUuid: string, keyUuid: string, name: string) => {
+    setConfirm({
+      msg: `Revoke key "${name}"? This cannot be undone.`,
+      fn: async () => {
+        await apiKeysApi.revokeOrgKey(orgUuid, keyUuid);
+        toast.success('Key revoked');
+        await load();
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Org</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Key Name</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Prefix</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Scopes</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Used</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Created By</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading ? (
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">Loading…</td></tr>
+            ) : keys.length === 0 ? (
+              <tr><td colSpan={8} className="text-center py-8 text-gray-400">No org API keys found.</td></tr>
+            ) : keys.map((k) => (
+              <tr key={k.uuid} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-xs text-gray-700 font-medium">{k.org_name}</td>
+                <td className="px-4 py-3 text-xs text-gray-900">{k.name}</td>
+                <td className="px-4 py-3 font-mono text-xs text-gray-600">{k.key_prefix}…</td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-1 flex-wrap">
+                    {k.scopes.map((s) => (
+                      <span key={s} className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${
+                        s === 'write' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                      }`}>{s}</span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">{fmtDate(k.last_used_at)}</td>
+                <td className="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate">{k.created_by_email}</td>
+                <td className="px-4 py-3">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    k.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                  }`}>
+                    {k.is_active ? 'Active' : 'Revoked'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  {k.is_active && (
+                    <button
+                      type="button"
+                      onClick={() => handleRevoke(k.org_id, k.uuid, k.name)}
+                      className="text-xs text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <ConfirmDialog
+        open={!!confirm}
+        message={confirm?.msg ?? ''}
+        onConfirm={async () => { if (confirm) { await confirm.fn(); } setConfirm(null); }}
+        onCancel={() => setConfirm(null)}
+      />
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email';
+type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email' | 'apikeys';
 
 export default function AdminConsole() {
   const navigate = useNavigate();
@@ -750,6 +856,7 @@ export default function AdminConsole() {
     { key: 'organizations', label: 'Organizations' },
     { key: 'events',        label: 'Event Log' },
     { key: 'email',         label: 'Email Settings' },
+    { key: 'apikeys',       label: 'API Keys' },
   ];
 
   return (
@@ -785,6 +892,7 @@ export default function AdminConsole() {
       {tab === 'organizations' && <OrgsTab />}
       {tab === 'events'        && <EventLogTab />}
       {tab === 'email'         && <EmailSettingsTab />}
+      {tab === 'apikeys'       && <AdminApiKeysTab />}
     </div>
   );
 }
