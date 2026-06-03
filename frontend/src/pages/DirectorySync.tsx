@@ -394,7 +394,7 @@ function SyncTab({ orgUuid, cfg }: { orgUuid: string; cfg: DirectoryConfigRespon
         }`}>
           <span className="font-semibold capitalize">{lastLog.status}</span>
           {' — '}{lastLog.users_added} added, {lastLog.users_updated} updated, {lastLog.users_deactivated} deactivated
-          {lastLog.errors && Array.isArray(lastLog.errors) && lastLog.errors.length > 0 && (
+          {!!lastLog.errors && Array.isArray(lastLog.errors) && lastLog.errors.length > 0 && (
             <p className="mt-1 text-xs opacity-80">{(lastLog.errors as string[]).slice(0, 3).join('; ')}</p>
           )}
         </div>

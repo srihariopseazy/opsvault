@@ -872,7 +872,23 @@ function AdminSsoTab() {
   const handleToggle = async (orgUuid: string, cfg: SsoConfigResponse) => {
     setToggling(orgUuid);
     try {
-      await ssoApi.upsertConfig(orgUuid, { ...cfg, is_active: !cfg.is_active });
+      await ssoApi.upsertConfig(orgUuid, {
+        provider_type:    cfg.provider_type,
+        is_active:        !cfg.is_active,
+        saml_entity_id:    cfg.saml_entity_id    ?? undefined,
+        saml_sso_url:      cfg.saml_sso_url      ?? undefined,
+        saml_slo_url:      cfg.saml_slo_url      ?? undefined,
+        saml_certificate:  cfg.saml_certificate  ?? undefined,
+        saml_sp_entity_id: cfg.saml_sp_entity_id ?? undefined,
+        saml_sp_acs_url:   cfg.saml_sp_acs_url   ?? undefined,
+        oidc_client_id:     cfg.oidc_client_id     ?? undefined,
+        oidc_client_secret: undefined,
+        oidc_discovery_url: cfg.oidc_discovery_url ?? undefined,
+        oidc_scopes:        cfg.oidc_scopes        ?? undefined,
+        oidc_redirect_uri:  cfg.oidc_redirect_uri  ?? undefined,
+        attribute_mapping:  cfg.attribute_mapping  ?? undefined,
+        auto_provision:     cfg.auto_provision,
+      });
       toast.success(`SSO ${cfg.is_active ? 'disabled' : 'enabled'}`);
       load();
     } catch {
