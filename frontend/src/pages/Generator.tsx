@@ -1,7 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 import { copyToClipboard } from '../utils/helpers';
+import { encryptWithKey, decryptWithKey } from '../crypto/cryptoEngine';
+import { generatorHistoryApi, GeneratorHistoryEntry } from '../api/generatorHistoryApi';
 import {
   generatePassword,
   getPasswordStrength,
@@ -16,9 +20,10 @@ import {
 interface GeneratorUIProps {
   onUse?: (password: string) => void;
   compact?: boolean;
+  onGenerate?: (password: string) => void;
 }
 
-function GeneratorUI({ onUse, compact = false }: GeneratorUIProps) {
+function GeneratorUI({ onUse, compact = false, onGenerate }: GeneratorUIProps) {
   const toast = useToast();
   const [opts, setOpts] = useState<GeneratorOptions>(DEFAULT_GENERATOR_OPTIONS);
   const [password, setPassword] = useState(() => generatePassword(DEFAULT_GENERATOR_OPTIONS));
@@ -29,8 +34,9 @@ function GeneratorUI({ onUse, compact = false }: GeneratorUIProps) {
     setPassword(pw);
     saveToGeneratorHistory(pw);
     setHistory(getGeneratorHistory());
+    onGenerate?.(pw);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts]);
+  }, [opts, onGenerate]);
 
   const handleCopy = useCallback(async () => {
     await copyToClipboard(password);
@@ -145,10 +151,10 @@ function GeneratorUI({ onUse, compact = false }: GeneratorUIProps) {
         )}
       </div>
 
-      {/* History */}
+      {/* Local history (compact shows nothing) */}
       {!compact && history.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Recent history</p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Recent (local)</p>
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {history.map((pw, i) => {
               const s = getPasswordStrength(pw);
@@ -189,9 +195,139 @@ export function PasswordGeneratorModal({ open, onClose, onUse }: PasswordGenerat
   );
 }
 
+// ─── Server-side history tab ──────────────────────────────────────────────────
+
+function HistoryTab({ symmetricKey }: { symmetricKey: string | null }) {
+  const toast = useToast();
+  const [entries, setEntries] = useState<GeneratorHistoryEntry[]>([]);
+  const [decrypted, setDecrypted] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [deletingUuid, setDeletingUuid] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await generatorHistoryApi.list();
+      setEntries(data);
+      // Decrypt all entries
+      if (symmetricKey) {
+        const dec: Record<string, string> = {};
+        await Promise.all(
+          data.map(async (e) => {
+            try {
+              dec[e.uuid] = await decryptWithKey(e.password, symmetricKey);
+            } catch {
+              dec[e.uuid] = '[cannot decrypt]';
+            }
+          })
+        );
+        setDecrypted(dec);
+      }
+    } catch {
+      toast.error('Failed to load history');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symmetricKey]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleDelete = useCallback(async (uuid: string) => {
+    setDeletingUuid(uuid);
+    try {
+      await generatorHistoryApi.deleteEntry(uuid);
+      setEntries((prev) => prev.filter((e) => e.uuid !== uuid));
+    } catch {
+      toast.error('Failed to delete entry');
+    } finally {
+      setDeletingUuid(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleClearAll = useCallback(async () => {
+    setClearingAll(true);
+    try {
+      await generatorHistoryApi.clearAll();
+      setEntries([]);
+      setDecrypted({});
+      toast.success('History cleared');
+    } catch {
+      toast.error('Failed to clear history');
+    } finally {
+      setClearingAll(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (loading) return <div className="py-8 text-center text-sm text-gray-400">Loading…</div>;
+
+  return (
+    <div className="space-y-3">
+      {entries.length > 0 && (
+        <div className="flex justify-end">
+          <button type="button" onClick={handleClearAll} disabled={clearingAll}
+            className="text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+            {clearingAll ? 'Clearing…' : 'Clear all'}
+          </button>
+        </div>
+      )}
+      {entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-gray-400">No history yet. Generate a password to start tracking.</p>
+      ) : (
+        <div className="space-y-1">
+          {entries.map((e) => {
+            const pw = decrypted[e.uuid] ?? '…';
+            const s = getPasswordStrength(pw);
+            return (
+              <div key={e.uuid} className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg">
+                <span className="flex-1 font-mono text-xs text-gray-700 truncate">{pw}</span>
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${s.color}`} title={s.label} />
+                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                  {e.created_at ? new Date(e.created_at).toLocaleDateString() : ''}
+                </span>
+                <button type="button"
+                  onClick={async () => { await copyToClipboard(pw); toast.success('Copied'); }}
+                  className="text-gray-400 hover:text-blue-600 flex-shrink-0" title="Copy">
+                  <CopyIcon />
+                </button>
+                <button type="button"
+                  onClick={() => handleDelete(e.uuid)}
+                  disabled={deletingUuid === e.uuid}
+                  className="text-gray-300 hover:text-red-500 flex-shrink-0 disabled:opacity-50" title="Delete">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Full Generator Page (default export) ────────────────────────────────────
 
+type PageTab = 'generator' | 'history';
+
 export default function Generator() {
+  const toast = useToast();
+  const symmetricKey = useSelector((s: RootState) => s.vault.symmetricKey);
+  const [pageTab, setPageTab] = useState<PageTab>('generator');
+
+  const handleGenerate = useCallback(async (pw: string) => {
+    if (!symmetricKey) return;
+    try {
+      const enc = await encryptWithKey(pw, symmetricKey);
+      await generatorHistoryApi.save(enc);
+    } catch { /* fire-and-forget, don't block UX */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symmetricKey]);
+
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <div className="mb-6">
@@ -200,8 +336,25 @@ export default function Generator() {
           Generate strong, random passwords using a cryptographically secure source.
         </p>
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit mb-5">
+        {([['generator', 'Generator'], ['history', 'History']] as [PageTab, string][]).map(([t, label]) => (
+          <button key={t} type="button" onClick={() => setPageTab(t)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              pageTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <GeneratorUI />
+        {pageTab === 'generator' ? (
+          <GeneratorUI onGenerate={handleGenerate} />
+        ) : (
+          <HistoryTab symmetricKey={symmetricKey} />
+        )}
       </div>
     </div>
   );

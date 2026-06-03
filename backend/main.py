@@ -13,6 +13,10 @@ from routes.settings import router as settings_router
 from routes.sessions import router as sessions_router
 from routes.organizations import orgs_router, invites_router
 from routes.collections import router as collections_router
+from routes.emergency_access import router as emergency_access_router
+from routes.send import router as send_router
+from routes.generator_history import router as generator_history_router
+from routes.notifications import router as notifications_router
 
 
 @asynccontextmanager
@@ -36,13 +40,17 @@ app.add_middleware(RateLimiterMiddleware)
 
 API_PREFIX = "/api/v1"
 
-app.include_router(health_router,      prefix=API_PREFIX)
-app.include_router(auth_router,        prefix=API_PREFIX)
-app.include_router(vault_router,       prefix=API_PREFIX)
-app.include_router(dashboard_router,   prefix=API_PREFIX)
-app.include_router(folders_router,     prefix=API_PREFIX)
-app.include_router(settings_router,    prefix=API_PREFIX)
-app.include_router(sessions_router,    prefix=API_PREFIX)
-app.include_router(orgs_router,        prefix=API_PREFIX)
-app.include_router(invites_router,     prefix=API_PREFIX)
-app.include_router(collections_router, prefix=API_PREFIX)
+app.include_router(health_router,            prefix=API_PREFIX)
+app.include_router(auth_router,              prefix=API_PREFIX)
+app.include_router(vault_router,             prefix=API_PREFIX)
+app.include_router(dashboard_router,         prefix=API_PREFIX)
+app.include_router(folders_router,           prefix=API_PREFIX)
+app.include_router(settings_router,          prefix=API_PREFIX)
+app.include_router(sessions_router,          prefix=API_PREFIX)
+app.include_router(orgs_router,              prefix=API_PREFIX)
+app.include_router(invites_router,           prefix=API_PREFIX)
+app.include_router(collections_router,       prefix=API_PREFIX)
+app.include_router(emergency_access_router,  prefix=API_PREFIX)
+app.include_router(send_router,              prefix=API_PREFIX)
+app.include_router(generator_history_router, prefix=API_PREFIX)
+app.include_router(notifications_router,     prefix=API_PREFIX)

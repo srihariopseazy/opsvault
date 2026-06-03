@@ -19,6 +19,9 @@ import SessionManagement from './pages/SessionManagement';
 import Organizations from './pages/Organizations';
 import OrgDetail from './pages/OrgDetail';
 import CollectionDetail from './pages/CollectionDetail';
+import EmergencyAccess from './pages/EmergencyAccess';
+import SendItems from './pages/SendItems';
+import SendView from './pages/SendView';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -76,7 +79,12 @@ function AppRoutes() {
         <Route path={ROUTES.ORGANIZATIONS}        element={<Organizations />} />
         <Route path="/organizations/:uuid"        element={<OrgDetail />} />
         <Route path="/organizations/:uuid/collections/:colUuid" element={<CollectionDetail />} />
+        <Route path={ROUTES.EMERGENCY_ACCESS} element={<EmergencyAccess />} />
+        <Route path={ROUTES.SEND_ITEMS}        element={<SendItems />} />
       </Route>
+
+      {/* Public send view — no auth required */}
+      <Route path="/send/:accessId" element={<SendView />} />
 
       <Route path="/" element={<Navigate to={ROUTES.VAULT} replace />} />
       <Route path="*" element={<Navigate to={ROUTES.VAULT} replace />} />

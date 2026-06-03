@@ -15,6 +15,9 @@ export const ROUTES = {
   ORGANIZATIONS: '/organizations',
   ORG_DETAIL: '/organizations/:uuid',
   COLLECTION_DETAIL: '/organizations/:uuid/collections/:colUuid',
+  EMERGENCY_ACCESS: '/emergency-access',
+  SEND_ITEMS: '/send-items',
+  SEND_VIEW: '/send/:accessId',
 } as const;
 
 export const ITEM_TYPES = {
