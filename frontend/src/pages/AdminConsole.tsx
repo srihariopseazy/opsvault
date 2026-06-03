@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../store';
 import { adminApi, AdminUser, AdminOrg, PlatformEvent, PlatformStats } from '../api/adminApi';
 import { smtpApi, SmtpConfig, SmtpConfigUpdate, EmailLog } from '../api/smtpApi';
 import { apiKeysApi, AdminOrgApiKey } from '../api/apiKeysApi';
+import { ssoApi, SsoConfigResponse } from '../api/ssoApi';
 import { useToast } from '../components/ui/Toast';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -828,9 +829,161 @@ function AdminApiKeysTab() {
   );
 }
 
+// ── SSO Configuration tab ─────────────────────────────────────────────────────
+
+interface OrgSsoRow {
+  org_uuid: string;
+  org_name: string;
+  cfg: SsoConfigResponse | null;
+}
+
+function AdminSsoTab() {
+  const toast = useToast();
+  const [rows, setRows] = useState<OrgSsoRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: orgs } = await adminApi.listOrgs({ limit: 200 });
+      const rows = await Promise.all(
+        orgs.map(async (org) => {
+          try {
+            const { data: cfg } = await ssoApi.getConfig(org.uuid);
+            return { org_uuid: org.uuid, org_name: org.name, cfg };
+          } catch {
+            return { org_uuid: org.uuid, org_name: org.name, cfg: null };
+          }
+        })
+      );
+      setRows(rows.filter((r) => r.cfg !== null));
+    } catch {
+      toast.error('Failed to load SSO configurations');
+    } finally {
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleToggle = async (orgUuid: string, cfg: SsoConfigResponse) => {
+    setToggling(orgUuid);
+    try {
+      await ssoApi.upsertConfig(orgUuid, { ...cfg, is_active: !cfg.is_active });
+      toast.success(`SSO ${cfg.is_active ? 'disabled' : 'enabled'}`);
+      load();
+    } catch {
+      toast.error('Failed to update SSO status');
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Organization</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Provider</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Identity URL / Entity ID</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Auto-provision</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading ? (
+              <tr><td colSpan={6} className="text-center py-8 text-gray-400">Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6} className="text-center py-8 text-gray-400">No SSO configurations found.</td></tr>
+            ) : rows.map(({ org_uuid, org_name, cfg }) => cfg && (
+              <React.Fragment key={org_uuid}>
+                <tr className="hover:bg-gray-50">
+                  <td className="px-4 py-3 font-medium text-gray-900">{org_name}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase ${
+                      cfg.provider_type === 'saml' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {cfg.provider_type}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 max-w-[220px] truncate">
+                    {cfg.provider_type === 'oidc' ? cfg.oidc_discovery_url : cfg.saml_entity_id}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      cfg.auto_provision ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {cfg.auto_provision ? 'On' : 'Off'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      cfg.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {cfg.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <button type="button"
+                        onClick={() => setExpanded(expanded === org_uuid ? null : org_uuid)}
+                        className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 px-2 py-1 rounded transition-colors">
+                        {expanded === org_uuid ? 'Hide' : 'Details'}
+                      </button>
+                      <button type="button"
+                        disabled={toggling === org_uuid}
+                        onClick={() => handleToggle(org_uuid, cfg)}
+                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                          cfg.is_active
+                            ? 'text-amber-600 border-amber-200 hover:bg-amber-50'
+                            : 'text-green-700 border-green-200 hover:bg-green-50'
+                        }`}>
+                        {toggling === org_uuid ? '…' : cfg.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {expanded === org_uuid && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                        {cfg.provider_type === 'oidc' ? (
+                          <>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">Discovery URL</span><p className="text-gray-700 mt-0.5 break-all">{cfg.oidc_discovery_url || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">Client ID</span><p className="text-gray-700 mt-0.5 font-mono">{cfg.oidc_client_id || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">Scopes</span><p className="text-gray-700 mt-0.5">{cfg.oidc_scopes || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">Redirect URI</span><p className="text-gray-700 mt-0.5 break-all">{cfg.oidc_redirect_uri || '—'}</p></div>
+                          </>
+                        ) : (
+                          <>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">Entity ID</span><p className="text-gray-700 mt-0.5 break-all">{cfg.saml_entity_id || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">SSO URL</span><p className="text-gray-700 mt-0.5 break-all">{cfg.saml_sso_url || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">SP Entity ID</span><p className="text-gray-700 mt-0.5 break-all">{cfg.saml_sp_entity_id || '—'}</p></div>
+                            <div><span className="text-gray-400 uppercase tracking-wide font-semibold">ACS URL</span><p className="text-gray-700 mt-0.5 break-all">{cfg.saml_sp_acs_url || '—'}</p></div>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email' | 'apikeys';
+type Tab = 'overview' | 'users' | 'organizations' | 'events' | 'email' | 'apikeys' | 'sso';
 
 export default function AdminConsole() {
   const navigate = useNavigate();
@@ -857,6 +1010,7 @@ export default function AdminConsole() {
     { key: 'events',        label: 'Event Log' },
     { key: 'email',         label: 'Email Settings' },
     { key: 'apikeys',       label: 'API Keys' },
+    { key: 'sso',           label: 'SSO' },
   ];
 
   return (
@@ -893,6 +1047,7 @@ export default function AdminConsole() {
       {tab === 'events'        && <EventLogTab />}
       {tab === 'email'         && <EmailSettingsTab />}
       {tab === 'apikeys'       && <AdminApiKeysTab />}
+      {tab === 'sso'           && <AdminSsoTab />}
     </div>
   );
 }

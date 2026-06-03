@@ -5,6 +5,7 @@ import { AppDispatch } from '../store';
 import { setAuth } from '../store/slices/authSlice';
 import { setSymmetricKey, setItems, setLoading } from '../store/slices/vaultSlice';
 import { authApi, AuthResponse } from '../api/authApi';
+import { ssoApi } from '../api/ssoApi';
 import { vaultApi } from '../api/vaultApi';
 import { useCrypto } from '../hooks/useCrypto';
 import { decryptWithKey } from '../crypto/cryptoEngine';
@@ -53,6 +54,11 @@ export default function Login() {
 
   // Cached master key + symmetric key between step 1 and step 2
   const [cachedMasterKey, setCachedMasterKey] = useState('');
+
+  // SSO dialog state
+  const [ssoDialogOpen, setSsoDialogOpen] = useState(false);
+  const [ssoOrgId, setSsoOrgId] = useState('');
+  const [ssoLoading, setSsoLoading] = useState(false);
 
   // ── Shared post-login: decrypt vault and navigate ─────────────────────────
 
@@ -169,6 +175,23 @@ export default function Login() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totpCode, mfaToken, trustDevice, cachedMasterKey, runPostLogin]);
+
+  // ── SSO initiation ────────────────────────────────────────────────────────
+
+  const handleSsoLogin = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ssoOrgId.trim()) return;
+    setSsoLoading(true);
+    try {
+      const { data } = await ssoApi.initiateLogin(ssoOrgId.trim());
+      window.location.href = data.redirect_url;
+    } catch (err: unknown) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSsoLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssoOrgId]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -288,12 +311,63 @@ export default function Login() {
         </div>
 
         {step === 1 && (
+          <>
+            <div className="flex items-center gap-3 mt-4">
+              <div className="flex-1 border-t border-gray-200" />
+              <span className="text-xs text-gray-400">or</span>
+              <div className="flex-1 border-t border-gray-200" />
+            </div>
+            <button
+              type="button"
+              onClick={() => setSsoDialogOpen(true)}
+              className="w-full mt-3 border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium py-2.5 rounded-lg transition-colors"
+            >
+              Sign in with SSO
+            </button>
+          </>
+        )}
+
+        {step === 1 && (
           <p className="text-center text-sm text-gray-500 mt-6">
             No account?{' '}
             <Link to={ROUTES.REGISTER} className="text-blue-600 hover:underline font-medium">
               Create one
             </Link>
           </p>
+        )}
+
+        {/* SSO organization dialog */}
+        {ssoDialogOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setSsoDialogOpen(false)} />
+            <div className="relative bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 p-6">
+              <h2 className="text-base font-semibold text-gray-900 mb-1">Sign in with SSO</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Enter your organization's UUID or identifier.
+              </p>
+              <form onSubmit={handleSsoLogin} className="space-y-4">
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  value={ssoOrgId}
+                  onChange={(e) => setSsoOrgId(e.target.value)}
+                  placeholder="Organization UUID"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setSsoDialogOpen(false)}
+                    className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={ssoLoading || !ssoOrgId.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                    {ssoLoading ? 'Redirecting…' : 'Continue'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>

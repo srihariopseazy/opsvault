@@ -24,6 +24,11 @@ from .notification_preference import NotificationPreference
 from .report import ScheduledReport, ReportLog, ReportType, ReportFrequency, ReportStatus
 from .api_key import ApiKey, OrgApiKey
 from .webhook import Webhook, WebhookDelivery
+from .sso import SsoConfig, SsoSession, SsoProviderType
+from .directory import (
+    DirectoryConfig, DirectorySyncLog, DirectorySyncUser,
+    DirectorySyncType, DirectorySyncStatus, DirectoryUserStatus,
+)
 
 __all__ = [
     "User",
@@ -69,4 +74,13 @@ __all__ = [
     "OrgApiKey",
     "Webhook",
     "WebhookDelivery",
+    "SsoConfig",
+    "SsoSession",
+    "SsoProviderType",
+    "DirectoryConfig",
+    "DirectorySyncLog",
+    "DirectorySyncUser",
+    "DirectorySyncType",
+    "DirectorySyncStatus",
+    "DirectoryUserStatus",
 ]

@@ -414,3 +414,81 @@ class AuthService:
         user.totp_secret = None
         user.totp_enabled = 0
         await db.flush()
+
+
+async def login_or_create_sso_user(
+    db: AsyncSession,
+    org_id: str,
+    email: str,
+    name: str,
+) -> "SsoCallbackResponse":
+    """Find existing user by email or create a new auto-provisioned SSO user.
+    Returns JWT tokens + user info for the SSO callback response.
+    """
+    import secrets as _secrets
+    from schemas.sso import SsoCallbackResponse
+    from models.sso import SsoConfig
+    from models.org_member import OrgMember, OrgMemberRole, OrgMemberStatus
+
+    # Check auto_provision setting
+    cfg_result = await db.execute(
+        select(SsoConfig).where(SsoConfig.org_id == org_id)
+    )
+    sso_cfg = cfg_result.scalar_one_or_none()
+    auto_provision = sso_cfg is not None and bool(sso_cfg.auto_provision)
+
+    # Look up existing user
+    user_result = await db.execute(select(User).where(User.email == email.lower().strip()))
+    user = user_result.scalar_one_or_none()
+    is_new = False
+
+    if not user:
+        if not auto_provision:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Auto-provisioning is disabled. Contact your administrator.",
+            )
+        # Create new SSO-provisioned user with placeholder vault key
+        placeholder_hash = _secrets.token_hex(32)
+        placeholder_key  = _secrets.token_hex(64)
+        user = User(
+            uuid=str(uuid.uuid4()),
+            email=email.lower().strip(),
+            name=name or email.split("@")[0],
+            master_password_hash=placeholder_hash,
+            protected_symmetric_key=placeholder_key,
+            kdf_iterations=settings.get("KDF_ITERATIONS", 10000) if hasattr(settings, "get") else 10000,
+            is_active=1,
+        )
+        db.add(user)
+        await db.flush()
+
+        # Add to org as member
+        member = OrgMember(
+            uuid=str(uuid.uuid4()),
+            org_id=org_id,
+            user_id=user.id,
+            role=OrgMemberRole.member,
+            status=OrgMemberStatus.accepted,
+            accepted_at=datetime.now(timezone.utc),
+        )
+        db.add(member)
+        await db.flush()
+        is_new = True
+    else:
+        user.last_login_at = datetime.now(timezone.utc)
+
+    jti = str(uuid.uuid4())
+    access_token  = TokenService.create_access_token(user.uuid, jti)
+    refresh_token = TokenService.create_refresh_token(user.uuid, str(uuid.uuid4()))
+
+    return SsoCallbackResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_uuid=user.uuid,
+        user_email=user.email,
+        user_name=user.name,
+        protected_symmetric_key=user.protected_symmetric_key,
+        kdf_iterations=user.kdf_iterations or 10000,
+        is_new_user=is_new,
+    )

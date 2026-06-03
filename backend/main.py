@@ -26,6 +26,8 @@ from routes.reports import router as reports_router
 from routes.api_keys import router as api_keys_router
 from routes.org_api_keys import router as org_api_keys_router
 from routes.webhooks import router as webhooks_router
+from routes.sso import router as sso_router
+from routes.directory import router as directory_router
 
 
 @asynccontextmanager
@@ -72,3 +74,5 @@ app.include_router(reports_router,           prefix=API_PREFIX)
 app.include_router(api_keys_router,          prefix=API_PREFIX)
 app.include_router(org_api_keys_router,      prefix=API_PREFIX)
 app.include_router(webhooks_router,          prefix=API_PREFIX)
+app.include_router(sso_router,               prefix=API_PREFIX)
+app.include_router(directory_router,         prefix=API_PREFIX)

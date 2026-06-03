@@ -24,6 +24,8 @@ export const ROUTES = {
   REPORTS: '/reports',
   API_KEYS: '/api-keys',
   WEBHOOKS: '/webhooks',
+  SSO_CALLBACK: '/sso/callback',
+  DIRECTORY_SYNC: '/directory-sync',
 } as const;
 
 export const ITEM_TYPES = {

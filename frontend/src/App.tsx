@@ -28,6 +28,8 @@ import PolicyEnforcement from './pages/PolicyEnforcement';
 import Reports from './pages/Reports';
 import ApiKeys from './pages/ApiKeys';
 import Webhooks from './pages/Webhooks';
+import SsoCallback from './pages/SsoCallback';
+import DirectorySync from './pages/DirectorySync';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -92,6 +94,7 @@ function AppRoutes() {
         <Route path={ROUTES.REPORTS}          element={<Reports />} />
         <Route path={ROUTES.API_KEYS}         element={<ApiKeys />} />
         <Route path={ROUTES.WEBHOOKS}         element={<Webhooks />} />
+        <Route path={ROUTES.DIRECTORY_SYNC}   element={<DirectorySync />} />
       </Route>
 
       {/* Auth required but vault may be locked — policy enforcement */}
@@ -103,6 +106,9 @@ function AppRoutes() {
           </RequireAuth>
         }
       />
+
+      {/* SSO callback — public, no auth required */}
+      <Route path={ROUTES.SSO_CALLBACK} element={<SsoCallback />} />
 
       {/* Public send view — no auth required */}
       <Route path="/send/:accessId" element={<SendView />} />
