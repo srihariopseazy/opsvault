@@ -93,10 +93,10 @@ function ItemViewModal({
             </>
           )}
           {data.type === 'identity' && Object.entries(fields as Record<string, string>).map(([k, v]) =>
-            v ? <Field key={k} label={k} value={String(v)} /> : null
+            v ? <Field key={k} label={k} value={String(v as string)} /> : null
           )}
-          {data.type === 'note' && fields.content && (
-            <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">{String(fields.content)}</div>
+          {data.type === 'note' && (
+            <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">{String(fields.content ?? '')}</div>
           )}
           {data.notes && (
             <div>
