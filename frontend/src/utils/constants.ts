@@ -27,6 +27,7 @@ export const ROUTES = {
   SSO_CALLBACK: '/sso/callback',
   DIRECTORY_SYNC: '/directory-sync',
   DEVICES: '/devices',
+  SHARED: '/shared',
 } as const;
 
 export const ITEM_TYPES = {

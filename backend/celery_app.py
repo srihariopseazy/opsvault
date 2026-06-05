@@ -8,7 +8,7 @@ celery_app = Celery(
     "opsvault",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["tasks.email_tasks", "tasks.report_tasks", "tasks.webhook_tasks"],
+    include=["tasks.email_tasks", "tasks.report_tasks", "tasks.webhook_tasks", "tasks.sharing_tasks"],
 )
 
 celery_app.conf.update(
@@ -20,7 +20,11 @@ celery_app.conf.update(
     beat_schedule={
         "send-scheduled-reports": {
             "task": "tasks.send_scheduled_reports",
-            "schedule": 3600,   # every hour
+            "schedule": 3600,
+        },
+        "expire-vault-shares": {
+            "task": "tasks.expire_vault_shares",
+            "schedule": 3600,
         },
     },
 )

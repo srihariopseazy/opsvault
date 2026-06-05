@@ -18,6 +18,7 @@ import { useToast } from '../components/ui/Toast';
 import { getFaviconUrl, getItemSubtitle } from '../utils/helpers';
 import { AddItemModal } from '../components/vault/AddItemModal';
 import { ViewItemModal } from '../components/vault/ViewItemModal';
+import { ShareItemModal } from '../components/vault/ShareItemModal';
 import { generateTOTP, getTimeRemaining } from '../utils/totp';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 
@@ -65,6 +66,8 @@ export default function Vault() {
   const [viewOpen, setViewOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<DecryptedVaultItem | null>(null);
+  const [shareItem, setShareItem] = useState<DecryptedVaultItem | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Folder filter from URL query param (?folder=<uuid>)
   const folderParam = searchParams.get('folder');
@@ -407,6 +410,7 @@ export default function Vault() {
                   active={viewItem?.uuid === item.uuid && viewOpen}
                   onSelect={() => handleItemClick(item)}
                   onToggleFavorite={handleToggleFavorite}
+                  onShare={(it) => { setShareItem(it); setShareOpen(true); }}
                   folders={folders}
                 />
               ))}
@@ -434,6 +438,13 @@ export default function Vault() {
         editingItem={editingItem}
         symmetricKey={symmetricKey}
         folders={folders}
+      />
+
+      {/* Share item modal */}
+      <ShareItemModal
+        open={shareOpen}
+        item={shareItem}
+        onClose={() => { setShareOpen(false); setShareItem(null); }}
       />
     </div>
   );
@@ -512,12 +523,13 @@ function TotpBadge({ secret }: { secret: string }) {
 }
 
 function ItemCard({
-  item, active, onSelect, onToggleFavorite, folders,
+  item, active, onSelect, onToggleFavorite, onShare, folders,
 }: {
   item: DecryptedVaultItem;
   active: boolean;
   onSelect: () => void;
   onToggleFavorite: (item: DecryptedVaultItem, e: React.MouseEvent) => void;
+  onShare: (item: DecryptedVaultItem) => void;
   folders: FolderResponse[];
 }) {
   const subtitle = getItemSubtitle(item.type, item.itemData as Record<string, unknown>);
@@ -570,6 +582,18 @@ function ItemCard({
         {item.totpSecret && (
           <TotpBadge secret={item.totpSecret} />
         )}
+        {/* Share button */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onShare(item); }}
+          title="Share item"
+          className="p-0.5 rounded hover:bg-blue-50 transition-colors text-gray-200 hover:text-blue-400"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={(e) => onToggleFavorite(item, e)}

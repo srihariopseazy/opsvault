@@ -5,9 +5,11 @@ import { TopNav } from './TopNav';
 import { OfflineBanner } from '../ui/OfflineBanner';
 import { PwaInstallBanner } from '../ui/PwaInstallBanner';
 import { usePolicyEnforcement } from '../../hooks/usePolicyEnforcement';
+import { useKeyPair } from '../../hooks/useKeyPair';
 
 export function AppLayout() {
   usePolicyEnforcement();
+  useKeyPair();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (

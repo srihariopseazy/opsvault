@@ -31,6 +31,7 @@ from .directory import (
     DirectorySyncType, DirectorySyncStatus, DirectoryUserStatus,
 )
 from .push import PushSubscription
+from .sharing import VaultShare, UserPublicKey, ShareStatus, SharePermission
 
 __all__ = [
     "User",
@@ -88,4 +89,8 @@ __all__ = [
     "DirectorySyncStatus",
     "DirectoryUserStatus",
     "PushSubscription",
+    "VaultShare",
+    "UserPublicKey",
+    "ShareStatus",
+    "SharePermission",
 ]
