@@ -170,7 +170,13 @@ const NAV_ITEMS = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  mobileOpen = false,
+  onMobileClose,
+}: {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useSelector((s: RootState) => s.auth.user);
@@ -183,10 +189,40 @@ export function Sidebar() {
       .catch(() => {});
   }, [location.pathname]);
 
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    onMobileClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   const activeFolderUuid = new URLSearchParams(location.search).get('folder');
 
   return (
-    <aside className="w-52 flex-shrink-0 border-r border-gray-200 bg-white flex flex-col">
+    <aside
+      className={[
+        'w-52 flex-shrink-0 border-r border-gray-200 bg-white flex flex-col',
+        // Mobile: fixed overlay drawer
+        'fixed inset-y-0 left-0 z-40 transition-transform duration-200',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        // Desktop: static in-flow
+        'sm:static sm:inset-auto sm:z-auto sm:translate-x-0 sm:transition-none',
+      ].join(' ')}
+    >
+      {/* Mobile close row */}
+      <div className="sm:hidden flex items-center justify-between px-3 pt-3 pb-1">
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Menu</span>
+        <button
+          type="button"
+          onClick={onMobileClose}
+          className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+          aria-label="Close menu"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {/* Admin Console — superusers only */}
         {user?.is_superuser && (

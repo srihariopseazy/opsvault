@@ -1,4 +1,5 @@
 import client from './client';
+import { offlineCache } from '../utils/offlineCache';
 
 export interface VaultItemPayload {
   type: string;
@@ -38,6 +39,18 @@ export interface SyncResponse {
 export const vaultApi = {
   sync() {
     return client.get<SyncResponse>('/vault/sync');
+  },
+
+  async syncWithCache(): Promise<{ data: SyncResponse; fromCache: boolean }> {
+    try {
+      const r = await client.get<SyncResponse>('/vault/sync');
+      await offlineCache.setMeta('vault_sync', r.data);
+      return { data: r.data, fromCache: false };
+    } catch {
+      const cached = await offlineCache.getMeta('vault_sync');
+      if (cached) return { data: cached as SyncResponse, fromCache: true };
+      throw new Error('No cached vault data available offline');
+    }
   },
 
   createItem(payload: VaultItemPayload) {

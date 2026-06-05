@@ -145,7 +145,7 @@ function NotificationBell() {
 
 // ── TopNav ────────────────────────────────────────────────────────────────────
 
-export function TopNav() {
+export function TopNav({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const user = useSelector((s: RootState) => s.auth.user);
@@ -165,8 +165,20 @@ export function TopNav() {
   };
 
   return (
-    <header className="h-14 border-b border-gray-200 bg-white flex items-center justify-between px-5 flex-shrink-0">
+    <header className="h-14 border-b border-gray-200 bg-white flex items-center justify-between px-3 sm:px-5 flex-shrink-0">
       <div className="flex items-center gap-2">
+        {/* Hamburger — mobile only */}
+        <button
+          type="button"
+          onClick={onMobileMenuToggle}
+          className="sm:hidden p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          aria-label="Open menu"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -174,32 +186,32 @@ export function TopNav() {
         <span className="font-bold text-gray-900 tracking-tight">OPSVAULT</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         <span className="text-sm text-gray-500 hidden md:block">{user?.email}</span>
 
         <NotificationBell />
 
         <button
           onClick={handleLock}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-2 sm:px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
           title="Lock vault"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          Lock
+          <span className="hidden sm:inline">Lock</span>
         </button>
 
         <button
           onClick={handleLogout}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-red-600 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-red-600 px-2 sm:px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          Log out
+          <span className="hidden sm:inline">Log out</span>
         </button>
       </div>
     </header>

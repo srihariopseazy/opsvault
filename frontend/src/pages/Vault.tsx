@@ -8,8 +8,10 @@ import {
   addItem,
   updateItem,
   removeItem,
+  setItems,
 } from '../store/slices/vaultSlice';
 import { useCrypto } from '../hooks/useCrypto';
+import { decryptWithKey } from '../crypto/cryptoEngine';
 import { vaultApi } from '../api/vaultApi';
 import { foldersApi, FolderResponse } from '../api/foldersApi';
 import { useToast } from '../components/ui/Toast';
@@ -17,6 +19,7 @@ import { getFaviconUrl, getItemSubtitle } from '../utils/helpers';
 import { AddItemModal } from '../components/vault/AddItemModal';
 import { ViewItemModal } from '../components/vault/ViewItemModal';
 import { generateTOTP, getTimeRemaining } from '../utils/totp';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,12 +51,14 @@ export default function Vault() {
   const items = useSelector((s: RootState) => s.vault.items);
   const personalVaultDisabled = useSelector((s: RootState) => s.ui?.personalVaultDisabled ?? false);
   const [searchParams] = useSearchParams();
+  const { isOnline } = useOfflineSync();
 
   // State
   const [section, setSection] = useState<SectionFilter>('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('name-asc');
   const [folders, setFolders] = useState<FolderResponse[]>([]);
+  const [isStale, setIsStale] = useState(false);
 
   // Modal state
   const [viewItem, setViewItem] = useState<DecryptedVaultItem | null>(null);
@@ -70,6 +75,58 @@ export default function Vault() {
       .then((r) => setFolders(r.data))
       .catch(() => {});
   }, []);
+
+  // Background sync: refresh vault from API and cache; fall back to IndexedDB when offline
+  useEffect(() => {
+    if (!symmetricKey) return;
+    let cancelled = false;
+
+    async function refresh() {
+      try {
+        const { data, fromCache } = await vaultApi.syncWithCache();
+        if (cancelled) return;
+        const decrypted = (
+          await Promise.all(
+            data.items.map(async (item) => {
+              try {
+                const nameStr  = await decryptWithKey(item.name, symmetricKey!);
+                const notesStr = item.notes ? await decryptWithKey(item.notes, symmetricKey!) : undefined;
+                const dataStr  = await decryptWithKey(item.item_data as string, symmetricKey!);
+                return {
+                  uuid: item.uuid,
+                  type: item.type as DecryptedVaultItem['type'],
+                  name: nameStr,
+                  notes: notesStr,
+                  favorite: item.favorite,
+                  folderId: item.folder_id,
+                  itemData: JSON.parse(dataStr),
+                  customFields: item.custom_fields,
+                  passwordHistory: item.password_history,
+                  reprompt: item.reprompt,
+                  deletedAt: item.deleted_at,
+                  createdAt: item.created_at,
+                  updatedAt: item.updated_at,
+                  revisionDate: item.revision_date,
+                } as DecryptedVaultItem;
+              } catch {
+                return null;
+              }
+            })
+          )
+        ).filter(Boolean) as DecryptedVaultItem[];
+        if (!cancelled) {
+          dispatch(setItems(decrypted));
+          setIsStale(fromCache);
+        }
+      } catch {
+        if (!cancelled) setIsStale(true);
+      }
+    }
+
+    refresh();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symmetricKey]);
 
   // ── Filtered + sorted item list ──────────────────────────────────────────
 
@@ -195,8 +252,8 @@ export default function Vault() {
 
   return (
     <div className="flex h-full">
-      {/* Left filter sidebar */}
-      <aside className="w-52 flex-shrink-0 border-r border-gray-200 bg-white flex flex-col">
+      {/* Left filter sidebar — hidden on mobile, visible on sm+ */}
+      <aside className="hidden sm:flex w-52 flex-shrink-0 border-r border-gray-200 bg-white flex-col">
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {(['all', 'login', 'note', 'card', 'identity'] as SectionFilter[]).map((s) => (
             <SidebarBtn
@@ -258,8 +315,40 @@ export default function Vault() {
             <p className="text-sm text-amber-800">Personal vault is disabled by your organization policy.</p>
           </div>
         )}
+
+        {/* Stale / offline data indicator */}
+        {(isStale || !isOnline) && (
+          <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-xs text-blue-700">Showing cached vault — changes will sync when back online.</p>
+          </div>
+        )}
+
+        {/* Mobile filter row — visible only on mobile (sidebar is hidden) */}
+        <div className="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-white overflow-x-auto">
+          {(['all', 'login', 'note', 'card', 'identity', 'favorites'] as SectionFilter[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setSection(s);
+                window.history.replaceState({}, '', window.location.pathname);
+              }}
+              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                section === s && !folderParam
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {SECTION_LABELS[s]}
+            </button>
+          ))}
+        </div>
+
         {/* Top bar */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 bg-white flex-wrap">
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-gray-200 bg-white flex-wrap">
           {/* Search */}
           <input
             type="search"

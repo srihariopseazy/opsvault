@@ -30,6 +30,7 @@ from .directory import (
     DirectoryConfig, DirectorySyncLog, DirectorySyncUser,
     DirectorySyncType, DirectorySyncStatus, DirectoryUserStatus,
 )
+from .push import PushSubscription
 
 __all__ = [
     "User",
@@ -86,4 +87,5 @@ __all__ = [
     "DirectorySyncType",
     "DirectorySyncStatus",
     "DirectoryUserStatus",
+    "PushSubscription",
 ]
