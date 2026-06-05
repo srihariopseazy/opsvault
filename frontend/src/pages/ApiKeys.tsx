@@ -632,7 +632,7 @@ function CliSetupTab() {
   const toast = useToast();
   const [cliKey, setCliKey] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const serverUrl = (import.meta as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_API_URL?.replace('/api/v1', '') ?? 'http://178.105.94.101:8080';
+  const serverUrl = (import.meta.env?.VITE_API_URL ?? 'http://178.105.94.101:8080').replace('/api/v1', '');
 
   const generateCliKey = async () => {
     setGenerating(true);
