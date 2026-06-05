@@ -609,9 +609,129 @@ function OrgKeysTab() {
   );
 }
 
+// ── CLI Setup tab ─────────────────────────────────────────────────────────────
+
+function CodeLine({ children }: { children: string }) {
+  const toast = useToast();
+  const copy = async () => {
+    await navigator.clipboard.writeText(children);
+    toast.success('Copied!');
+  };
+  return (
+    <div className="flex items-center justify-between bg-gray-900 text-green-400 font-mono text-xs rounded-lg px-4 py-2.5 gap-3">
+      <span className="truncate">{children}</span>
+      <button type="button" onClick={copy}
+        className="text-gray-400 hover:text-white transition-colors flex-shrink-0 text-[10px] border border-gray-600 px-1.5 py-0.5 rounded">
+        copy
+      </button>
+    </div>
+  );
+}
+
+function CliSetupTab() {
+  const toast = useToast();
+  const [cliKey, setCliKey] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const serverUrl = (import.meta as Record<string, unknown> & { env?: Record<string, string> }).env?.VITE_API_URL?.replace('/api/v1', '') ?? 'http://178.105.94.101:8080';
+
+  const generateCliKey = async () => {
+    setGenerating(true);
+    try {
+      const { data } = await apiKeysApi.createKey({
+        name: 'CLI',
+        scopes: ['read', 'write'],
+        expires_at: null,
+      });
+      setCliKey(data.full_key);
+    } catch {
+      toast.error('Failed to generate CLI token');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyKey = async () => {
+    if (!cliKey) return;
+    await navigator.clipboard.writeText(cliKey);
+    toast.success('API key copied');
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Installation */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+        <h3 className="font-semibold text-gray-900 mb-3">Installation</h3>
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500 mb-3">Install the CLI globally via npm, or build from source:</p>
+          <CodeLine>npm install -g opsvault-cli</CodeLine>
+          <p className="text-xs text-gray-400 mt-1 mb-1">— or build from source —</p>
+          <CodeLine>cd cli && npm install && npm run build && npm link</CodeLine>
+        </div>
+      </div>
+
+      {/* Generate CLI token */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+        <h3 className="font-semibold text-gray-900 mb-1">CLI Token</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Generate a dedicated API key for the CLI. You'll use it with <code className="bg-gray-100 px-1 rounded text-xs">ovault login --key</code> to skip the key-creation step.
+        </p>
+
+        {cliKey ? (
+          <div className="space-y-3">
+            <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 font-mono text-xs text-gray-700 break-all select-all">
+              {cliKey}
+            </div>
+            <p className="text-sm font-medium text-gray-700">Run this to log in:</p>
+            <CodeLine>{`ovault login --server ${serverUrl} --key ${cliKey}`}</CodeLine>
+            <div className="flex gap-2">
+              <button type="button" onClick={copyKey}
+                className="text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
+                Copy key
+              </button>
+              <p className="text-xs text-amber-700 self-center">
+                Store this key now — it won't be shown again.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={generateCliKey}
+            disabled={generating}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            {generating ? 'Generating…' : 'Generate CLI Token'}
+          </button>
+        )}
+      </div>
+
+      {/* Quick start */}
+      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
+        <h3 className="font-semibold text-gray-900 mb-3">Quick Start</h3>
+        <div className="space-y-2">
+          {[
+            ['List all vault items',         'ovault list'],
+            ['Search by name',               'ovault list --search github'],
+            ['Show item details',            'ovault get "GitHub"'],
+            ['Copy password to clipboard',   'ovault copy "GitHub"'],
+            ['Add new item (interactive)',   'ovault add'],
+            ['Generate a strong password',   'ovault generate --length 32'],
+            ['Export vault to JSON',         'ovault export --output backup.json'],
+          ].map(([desc, cmd]) => (
+            <div key={cmd}>
+              <p className="text-xs text-gray-400 mb-0.5"># {desc}</p>
+              <CodeLine>{cmd}</CodeLine>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'personal' | 'org';
+type Tab = 'personal' | 'org' | 'cli';
 
 export default function ApiKeys() {
   const [tab, setTab] = useState<Tab>('personal');
@@ -619,6 +739,7 @@ export default function ApiKeys() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'personal', label: 'Personal Keys' },
     { key: 'org',      label: 'Org Keys' },
+    { key: 'cli',      label: 'CLI Setup' },
   ];
 
   return (
@@ -653,6 +774,7 @@ export default function ApiKeys() {
 
       {tab === 'personal' && <PersonalKeysTab />}
       {tab === 'org'      && <OrgKeysTab />}
+      {tab === 'cli'      && <CliSetupTab />}
     </div>
   );
 }
