@@ -32,6 +32,7 @@ from .directory import (
 )
 from .push import PushSubscription
 from .sharing import VaultShare, UserPublicKey, ShareStatus, SharePermission
+from .autofill_log import AutofillLog
 
 __all__ = [
     "User",
@@ -93,4 +94,5 @@ __all__ = [
     "UserPublicKey",
     "ShareStatus",
     "SharePermission",
+    "AutofillLog",
 ]

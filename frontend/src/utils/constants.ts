@@ -28,6 +28,7 @@ export const ROUTES = {
   DIRECTORY_SYNC: '/directory-sync',
   DEVICES: '/devices',
   SHARED: '/shared',
+  EXTENSION: '/extension',
 } as const;
 
 export const ITEM_TYPES = {

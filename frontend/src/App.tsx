@@ -32,6 +32,7 @@ import SsoCallback from './pages/SsoCallback';
 import DirectorySync from './pages/DirectorySync';
 import Devices from './pages/Devices';
 import SharedWithMe from './pages/SharedWithMe';
+import ExtensionManager from './pages/ExtensionManager';
 import { ROUTES } from './utils/constants';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -99,6 +100,7 @@ function AppRoutes() {
         <Route path={ROUTES.DIRECTORY_SYNC}   element={<DirectorySync />} />
         <Route path={ROUTES.DEVICES}          element={<Devices />} />
         <Route path={ROUTES.SHARED}           element={<SharedWithMe />} />
+        <Route path={ROUTES.EXTENSION}        element={<ExtensionManager />} />
       </Route>
 
       {/* Auth required but vault may be locked — policy enforcement */}

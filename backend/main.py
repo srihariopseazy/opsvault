@@ -31,6 +31,7 @@ from routes.directory import router as directory_router
 from routes.devices import router as devices_router
 from routes.push import router as push_router
 from routes.sharing import router as sharing_router
+from routes.extension import router as extension_router
 
 
 @asynccontextmanager
@@ -82,3 +83,4 @@ app.include_router(directory_router,         prefix=API_PREFIX)
 app.include_router(devices_router,           prefix=API_PREFIX)
 app.include_router(push_router,              prefix=API_PREFIX)
 app.include_router(sharing_router,           prefix=API_PREFIX)
+app.include_router(extension_router,         prefix=API_PREFIX)
