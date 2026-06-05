@@ -77,7 +77,7 @@ export async function decryptSharedItem(
   encryptedItemData: string,
   encryptedItemKey: string,
   privateKey: string,
-): Promise<{ name: string; type: string; itemData: unknown; notes?: string }> {
+): Promise<{ name: string; type: string; itemData: Record<string, unknown>; notes?: string }> {
   const shareKey = await decryptWithKey(encryptedItemKey, privateKey);
   const plaintext = await decryptWithKey(encryptedItemData, shareKey);
   return JSON.parse(plaintext);
