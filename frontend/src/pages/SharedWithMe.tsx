@@ -92,7 +92,7 @@ function ItemViewModal({
               {fields.code && <Field label="CVV" value={String(fields.code)} secret onCopy={() => copyField(String(fields.code), 'CVV')} />}
             </>
           )}
-          {data.type === 'identity' && Object.entries(fields).map(([k, v]) =>
+          {data.type === 'identity' && Object.entries(fields as Record<string, string>).map(([k, v]) =>
             v ? <Field key={k} label={k} value={String(v)} /> : null
           )}
           {data.type === 'note' && fields.content && (
