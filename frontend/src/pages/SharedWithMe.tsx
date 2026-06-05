@@ -39,13 +39,13 @@ function ItemViewModal({
   data,
   onClose,
 }: {
-  data: { name: string; type: string; itemData: unknown; notes?: string } | null;
+  data: { name: string; type: string; itemData: Record<string, unknown>; notes?: string } | null;
   onClose: () => void;
 }) {
   const toast = useToast();
   if (!data) return null;
 
-  const fields = data.itemData as Record<string, unknown>;
+  const fields = data.itemData;
 
   const copyField = async (value: string, label: string) => {
     await navigator.clipboard.writeText(value);
@@ -154,7 +154,7 @@ export default function SharedWithMe() {
   const [byMe, setByMe]     = useState<VaultShareResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [viewData, setViewData] = useState<{ name: string; type: string; itemData: unknown; notes?: string } | null>(null);
+  const [viewData, setViewData] = useState<{ name: string; type: string; itemData: Record<string, unknown>; notes?: string } | null>(null);
   const [viewing, setViewing]   = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
 
