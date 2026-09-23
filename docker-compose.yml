@@ -4,7 +4,7 @@ services:
     container_name: opsvault_backend
     restart: unless-stopped
     environment:
-      - DATABASE_URL=mysql+aiomysql://opsvault_user:opsvault_password@opsvault_mysql:3306/opsvault
+      - DATABASE_URL=mysql+aiomysql://opsvault_user:${MYSQL_PASSWORD}@opsvault_mysql:3306/opsvault
       - REDIS_URL=redis://opsvault_redis:6379/0
       - SECRET_KEY=${SECRET_KEY}
       - SMTP_ENCRYPTION_KEY=${SMTP_ENCRYPTION_KEY}
@@ -36,14 +36,14 @@ services:
     environment:
       MYSQL_DATABASE: opsvault
       MYSQL_USER: opsvault_user
-      MYSQL_PASSWORD: opsvault_password
-      MYSQL_ROOT_PASSWORD: opsvault_root_password
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - opsvault_mysql_data:/var/lib/mysql
     networks:
       - opsvault_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-popsvault_root_password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
