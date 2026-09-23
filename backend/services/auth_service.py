@@ -434,14 +434,49 @@ class AuthService:
     @staticmethod
     async def change_master_password(
         user: User,
+        old_master_password_hash: str,
         new_master_password_hash: str,
         new_protected_symmetric_key: str,
         db: AsyncSession,
         request: Optional[Request] = None,
+        totp_code: Optional[str] = None,
+        current_jti: Optional[str] = None,
     ) -> None:
+        is_valid, _ = _verify_password(old_master_password_hash, user.master_password_hash)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current master password is incorrect",
+            )
+
+        if user.totp_enabled and user.totp_secret:
+            if not totp_code:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="TOTP code required to change master password",
+                )
+            totp = pyotp.TOTP(user.totp_secret)
+            if not totp.verify(totp_code.strip(), valid_window=1):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid TOTP code",
+                )
+
         user.master_password_hash = _hash_password(new_master_password_hash)
         user.protected_symmetric_key = new_protected_symmetric_key
         await db.flush()
+
+        # Force re-login everywhere else - only the session making this
+        # request (if any) survives the change.
+        other_sessions = await db.execute(
+            select(Session).where(
+                and_(Session.user_id == user.id, Session.jti != current_jti)
+            )
+        )
+        for s in other_sessions.scalars().all():
+            await db.delete(s)
+        await db.flush()
+
         try:
             from services.email_service import send_email
             await send_email(

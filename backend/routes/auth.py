@@ -102,10 +102,13 @@ async def change_master_password(
 ):
     await AuthService.change_master_password(
         current_user,
+        data.masterPasswordHash,
         data.newMasterPasswordHash,
         data.newProtectedSymmetricKey,
         db,
         request=request,
+        totp_code=data.totp_code,
+        current_jti=get_current_jti(request),
     )
     return MessageResponse(message="Master password updated successfully")
 

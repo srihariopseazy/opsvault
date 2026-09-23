@@ -34,6 +34,7 @@ class ChangeMasterPasswordRequest(BaseModel):
     masterPasswordHash: str
     newMasterPasswordHash: str
     newProtectedSymmetricKey: str
+    totp_code: Optional[str] = None
 
 
 class UserResponse(BaseModel):
