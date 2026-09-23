@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 from typing import Union
 
 from database import get_db
-from dependencies import get_current_active_user
+from dependencies import get_current_active_user, get_current_jti
 from models.user import User
+from models.session import Session
 from schemas.auth import (
     RegisterRequest,
     LoginRequest,
@@ -53,8 +55,21 @@ async def verify_mfa(
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    jti = get_current_jti(request)
+    if jti:
+        result = await db.execute(
+            select(Session).where(
+                and_(Session.user_id == current_user.id, Session.jti == jti)
+            )
+        )
+        session = result.scalar_one_or_none()
+        if session:
+            await db.delete(session)
+            await db.flush()
     return MessageResponse(message="Logged out successfully")
 
 

@@ -7,7 +7,7 @@ from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -134,6 +134,7 @@ async def process_saml_response(
     saml_response: str,
     relay_state: Optional[str],
     db: AsyncSession,
+    request: Request,
 ) -> SsoCallbackResponse:
     if not relay_state:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing relay state")
@@ -187,7 +188,7 @@ async def process_saml_response(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email not found in SAML response")
 
     await db.delete(session_obj)
-    return await login_or_create_sso_user(db, org_uuid, email, name or email.split("@")[0])
+    return await login_or_create_sso_user(db, org_uuid, email, name or email.split("@")[0], request)
 
 
 # ── OIDC flow ─────────────────────────────────────────────────────────────────
@@ -238,6 +239,7 @@ async def process_oidc_callback(
     code: str,
     state: str,
     db: AsyncSession,
+    request: Request,
 ) -> SsoCallbackResponse:
     result = await db.execute(
         select(SsoSession).where(
@@ -293,7 +295,7 @@ async def process_oidc_callback(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email not returned by OIDC provider")
 
     await db.delete(session_obj)
-    return await login_or_create_sso_user(db, org_uuid, email, name)
+    return await login_or_create_sso_user(db, org_uuid, email, name, request)
 
 
 # ── Initiate (detects provider type) ─────────────────────────────────────────
@@ -315,6 +317,7 @@ async def login_or_create_sso_user(
     org_id: str,
     email: str,
     name: str,
+    request: Request,
 ) -> "SsoCallbackResponse":
     from services.auth_service import login_or_create_sso_user as _impl
-    return await _impl(db, org_id, email, name)
+    return await _impl(db, org_id, email, name, request)

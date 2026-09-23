@@ -102,14 +102,16 @@ async def _create_session(
     db: AsyncSession,
 ) -> tuple[str, str]:
     """Create a new session row and return (access_token, refresh_token)."""
-    jti = str(uuid.uuid4())
-    access_token = TokenService.create_access_token(user.uuid, jti)
-    refresh_token = TokenService.create_refresh_token(user.uuid, str(uuid.uuid4()))
+    access_jti = str(uuid.uuid4())
+    refresh_jti = str(uuid.uuid4())
+    access_token = TokenService.create_access_token(user.uuid, access_jti)
+    refresh_token = TokenService.create_refresh_token(user.uuid, refresh_jti)
 
     session = Session(
         uuid=str(uuid.uuid4()),
         user_id=user.id,
-        jti=jti,
+        jti=access_jti,
+        refresh_jti=refresh_jti,
         device_name=request.headers.get("X-Device-Name"),
         device_type=request.headers.get("X-Device-Type"),
         ip_address=request.client.host if request.client else None,
@@ -120,6 +122,13 @@ async def _create_session(
     db.add(session)
     await db.flush()
     return access_token, refresh_token
+
+
+async def _revoke_all_sessions(db: AsyncSession, user_id: int) -> None:
+    result = await db.execute(select(Session).where(Session.user_id == user_id))
+    for s in result.scalars().all():
+        await db.delete(s)
+    await db.flush()
 
 
 async def _log_event(
@@ -360,6 +369,8 @@ class AuthService:
             )
 
         user_uuid = payload.get("sub")
+        presented_jti = payload.get("jti")
+
         result = await db.execute(select(User).where(User.uuid == user_uuid))
         user = result.scalar_one_or_none()
 
@@ -369,11 +380,56 @@ class AuthService:
                 detail="User not found",
             )
 
-        new_jti = str(uuid.uuid4())
-        new_access_token = TokenService.create_access_token(user.uuid, new_jti)
-        new_refresh_token = TokenService.create_refresh_token(user.uuid, str(uuid.uuid4()))
+        session_result = await db.execute(
+            select(Session).where(
+                and_(
+                    Session.user_id == user.id,
+                    Session.refresh_jti == presented_jti,
+                    Session.expires_at > datetime.now(timezone.utc),
+                )
+            )
+        )
+        session = session_result.scalar_one_or_none()
 
-        return _build_auth_response(user, new_access_token, new_refresh_token)
+        if session:
+            # Normal rotation: this is the current, un-rotated refresh token
+            # for this session. Retire it and issue a fresh pair.
+            new_access_jti = str(uuid.uuid4())
+            new_refresh_jti = str(uuid.uuid4())
+            session.jti = new_access_jti
+            session.previous_refresh_jti = session.refresh_jti
+            session.refresh_jti = new_refresh_jti
+            session.expires_at = TokenService.get_refresh_token_expiry()
+            session.last_used_at = datetime.now(timezone.utc)
+            await db.flush()
+
+            new_access_token = TokenService.create_access_token(user.uuid, new_access_jti)
+            new_refresh_token = TokenService.create_refresh_token(user.uuid, new_refresh_jti)
+            return _build_auth_response(user, new_access_token, new_refresh_token)
+
+        # Not the current refresh_jti for any session. If it matches a jti
+        # that was already rotated away, someone is replaying an old refresh
+        # token - most likely it was stolen and is racing the real client.
+        # Treat that as compromise and revoke every session for this user.
+        reused_result = await db.execute(
+            select(Session).where(
+                and_(
+                    Session.user_id == user.id,
+                    Session.previous_refresh_jti == presented_jti,
+                )
+            )
+        )
+        if reused_result.scalar_one_or_none():
+            await _revoke_all_sessions(db, user.id)
+            # Commit explicitly: the HTTPException raised below would otherwise
+            # cause get_db()'s exception handler to roll back this revocation
+            # along with everything else in this request's transaction.
+            await db.commit()
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
 
     @staticmethod
     async def change_master_password(
@@ -446,6 +502,7 @@ async def login_or_create_sso_user(
     org_id: str,
     email: str,
     name: str,
+    request: Request,
 ) -> "SsoCallbackResponse":
     """Find existing user by email or create a new auto-provisioned SSO user.
     Returns JWT tokens + user info for the SSO callback response.
@@ -503,9 +560,7 @@ async def login_or_create_sso_user(
     else:
         user.last_login_at = datetime.now(timezone.utc)
 
-    jti = str(uuid.uuid4())
-    access_token  = TokenService.create_access_token(user.uuid, jti)
-    refresh_token = TokenService.create_refresh_token(user.uuid, str(uuid.uuid4()))
+    access_token, refresh_token = await _create_session(user, request, db)
 
     return SsoCallbackResponse(
         access_token=access_token,

@@ -81,21 +81,23 @@ async def initiate_sso_login(
 
 @router.post("/saml/callback", response_model=SsoCallbackResponse)
 async def saml_callback(
+    request: Request,
     SAMLResponse: str = Form(...),
     RelayState: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await sso_service.process_saml_response(SAMLResponse, RelayState, db)
+    result = await sso_service.process_saml_response(SAMLResponse, RelayState, db, request)
     await db.commit()
     return result
 
 
 @router.get("/oidc/callback", response_model=SsoCallbackResponse)
 async def oidc_callback(
+    request: Request,
     code: str = Query(...),
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await sso_service.process_oidc_callback(code, state, db)
+    result = await sso_service.process_oidc_callback(code, state, db, request)
     await db.commit()
     return result

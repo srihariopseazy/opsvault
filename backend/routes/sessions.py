@@ -6,12 +6,11 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from database import get_db
-from dependencies import get_current_active_user
+from dependencies import get_current_active_user, get_current_jti
 from models.user import User
 from models.session import Session
 from models.login_event import LoginEvent
 from schemas.common import MessageResponse
-from services.token_service import TokenService
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -43,17 +42,6 @@ class LoginEventResponse(BaseModel):
         from_attributes = True
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _current_jti(request: Request) -> Optional[str]:
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header.removeprefix("Bearer ").strip()
-    if not token:
-        return None
-    payload = TokenService.decode_access_token(token)
-    return payload.get("jti") if payload else None
-
-
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[SessionResponse])
@@ -64,7 +52,7 @@ async def list_sessions(
 ):
     """Return all active sessions for the current user, marking the caller's
     own session with is_current=True."""
-    current_jti = _current_jti(request)
+    current_jti = get_current_jti(request)
 
     result = await db.execute(
         select(Session)
@@ -95,7 +83,7 @@ async def revoke_all_sessions(
 ):
     """Delete every session for the current user except the one making this
     request, forcing all other devices to re-authenticate."""
-    current_jti = _current_jti(request)
+    current_jti = get_current_jti(request)
 
     result = await db.execute(
         select(Session).where(
@@ -122,7 +110,7 @@ async def revoke_session(
     db: AsyncSession = Depends(get_db),
 ):
     """Revoke a specific session by its UUID."""
-    current_jti = _current_jti(request)
+    current_jti = get_current_jti(request)
 
     result = await db.execute(
         select(Session).where(

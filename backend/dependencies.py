@@ -1,12 +1,25 @@
+from datetime import datetime, timezone
+from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from services.token_service import TokenService
 from models.user import User
-from sqlalchemy import select
+from models.session import Session
+from sqlalchemy import select, and_
 
 security = HTTPBearer()
+
+
+def get_current_jti(request: Request) -> Optional[str]:
+    """Extract the jti of the bearer access token on this request, if any."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token:
+        return None
+    payload = TokenService.decode_access_token(token)
+    return payload.get("jti") if payload else None
 
 
 async def get_current_user(
@@ -23,10 +36,27 @@ async def get_current_user(
         )
 
     user_uuid = payload.get("sub")
-    if not user_uuid:
+    jti = payload.get("jti")
+    if not user_uuid or not jti:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
+        )
+
+    session_result = await db.execute(
+        select(Session).where(
+            and_(
+                Session.jti == jti,
+                Session.is_active == 1,
+                Session.expires_at > datetime.now(timezone.utc),
+            )
+        )
+    )
+    if not session_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     result = await db.execute(select(User).where(User.uuid == user_uuid))

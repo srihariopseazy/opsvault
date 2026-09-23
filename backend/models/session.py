@@ -12,6 +12,8 @@ class Session(Base):
     uuid = Column(String(36), unique=True, nullable=False)
     user_id = Column(BIGINT(unsigned=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     jti = Column(String(255), unique=True, nullable=False)
+    refresh_jti = Column(String(255), unique=True, nullable=False)
+    previous_refresh_jti = Column(String(255), unique=True, nullable=True)
     device_name = Column(String(255), nullable=True)
     device_type = Column(String(100), nullable=True)
     ip_address = Column(String(45), nullable=True)
