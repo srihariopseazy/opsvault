@@ -31,7 +31,7 @@ def upgrade() -> None:
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
     )
-    op.create_unique_index("ix_autofill_logs_uuid",    "autofill_logs", ["uuid"])
+    op.create_index("ix_autofill_logs_uuid",    "autofill_logs", ["uuid"], unique=True)
     op.create_index("ix_autofill_logs_user_id",        "autofill_logs", ["user_id"])
     op.create_index("ix_autofill_logs_item_uuid",      "autofill_logs", ["item_uuid"])
 

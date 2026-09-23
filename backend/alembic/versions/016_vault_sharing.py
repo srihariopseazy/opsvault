@@ -26,7 +26,7 @@ def upgrade() -> None:
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
     )
-    op.create_unique_index("ix_user_public_keys_user_id", "user_public_keys", ["user_id"])
+    op.create_index("ix_user_public_keys_user_id", "user_public_keys", ["user_id"], unique=True)
 
     op.create_table(
         "vault_shares",
@@ -60,7 +60,7 @@ def upgrade() -> None:
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
     )
-    op.create_unique_index("ix_vault_shares_uuid",           "vault_shares", ["uuid"])
+    op.create_index("ix_vault_shares_uuid",           "vault_shares", ["uuid"], unique=True)
     op.create_index("ix_vault_shares_sharer_id",             "vault_shares", ["sharer_id"])
     op.create_index("ix_vault_shares_recipient_id",          "vault_shares", ["recipient_id"])
     op.create_index("ix_vault_shares_recipient_email",       "vault_shares", ["recipient_email"])
