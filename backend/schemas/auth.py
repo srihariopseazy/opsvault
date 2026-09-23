@@ -1,5 +1,13 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Literal
+
+# Server-side floor for PBKDF2 iterations. Below this, an offline attacker
+# who obtains the users table can brute-force the login hash too cheaply.
+# Rejected outright rather than silently clamped: the client already derived
+# masterPasswordHash locally using whatever iteration count it actually used,
+# so silently storing a different kdfIterations value here would desync
+# future logins (which re-derive using the stored count) from that hash.
+MIN_KDF_ITERATIONS = 600_000
 
 
 class RegisterRequest(BaseModel):
@@ -8,7 +16,7 @@ class RegisterRequest(BaseModel):
     masterPasswordHash: str
     masterPasswordHint: Optional[str] = None
     protectedSymmetricKey: str
-    kdfIterations: int = 600000
+    kdfIterations: int = Field(default=MIN_KDF_ITERATIONS, ge=MIN_KDF_ITERATIONS)
 
 
 class LoginRequest(BaseModel):
