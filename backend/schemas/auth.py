@@ -34,7 +34,23 @@ class ChangeMasterPasswordRequest(BaseModel):
     masterPasswordHash: str
     newMasterPasswordHash: str
     newProtectedSymmetricKey: str
+    newKdfIterations: int = Field(default=MIN_KDF_ITERATIONS, ge=MIN_KDF_ITERATIONS)
     totp_code: Optional[str] = None
+
+
+class KdfParamsResponse(BaseModel):
+    kdf_iterations: int
+
+
+class MigrateKdfRequest(BaseModel):
+    """Silent crypto-scheme upgrade for an account still below the current
+    KDF floor - fired automatically right after a successful login, not a
+    user-initiated password change, so it reuses that login's own fresh
+    session/MFA proof instead of asking for TOTP again."""
+    oldMasterPasswordHash: str
+    newMasterPasswordHash: str
+    newProtectedSymmetricKey: str
+    newKdfIterations: int = Field(ge=MIN_KDF_ITERATIONS)
 
 
 class UserResponse(BaseModel):

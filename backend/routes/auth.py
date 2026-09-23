@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import Union
@@ -19,6 +19,8 @@ from schemas.auth import (
     TotpStatusResponse,
     TotpSetupResponse,
     TotpEnableRequest,
+    KdfParamsResponse,
+    MigrateKdfRequest,
 )
 from schemas.common import MessageResponse
 from services.auth_service import AuthService
@@ -33,6 +35,17 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     return await AuthService.register(data, db, request)
+
+
+@router.get("/kdf-params", response_model=KdfParamsResponse)
+async def kdf_params(
+    email: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public, pre-login lookup so the client knows what iteration count to
+    derive with before it can authenticate at all."""
+    iterations = await AuthService.get_kdf_iterations(email, db)
+    return KdfParamsResponse(kdf_iterations=iterations)
 
 
 @router.post("/login", response_model=Union[AuthResponse, MfaRequiredResponse])
@@ -105,12 +118,34 @@ async def change_master_password(
         data.masterPasswordHash,
         data.newMasterPasswordHash,
         data.newProtectedSymmetricKey,
+        data.newKdfIterations,
         db,
         request=request,
         totp_code=data.totp_code,
         current_jti=get_current_jti(request),
     )
     return MessageResponse(message="Master password updated successfully")
+
+
+@router.post("/migrate-kdf", response_model=MessageResponse)
+async def migrate_kdf(
+    data: MigrateKdfRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Silent crypto-scheme upgrade fired by the client right after a
+    successful login for an account still below the current KDF floor.
+    No totp_code here by design - the access token used to reach this
+    endpoint already came from a login that itself required MFA if enabled."""
+    await AuthService.migrate_kdf(
+        current_user,
+        data.oldMasterPasswordHash,
+        data.newMasterPasswordHash,
+        data.newProtectedSymmetricKey,
+        data.newKdfIterations,
+        db,
+    )
+    return MessageResponse(message="Encryption parameters upgraded")
 
 
 # ── TOTP management ───────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ from schemas.auth import (
     VerifyMfaRequest,
     TotpSetupResponse,
     TotpStatusResponse,
+    MIN_KDF_ITERATIONS,
 )
 from services.token_service import TokenService
 
@@ -437,6 +438,7 @@ class AuthService:
         old_master_password_hash: str,
         new_master_password_hash: str,
         new_protected_symmetric_key: str,
+        new_kdf_iterations: int,
         db: AsyncSession,
         request: Optional[Request] = None,
         totp_code: Optional[str] = None,
@@ -464,6 +466,7 @@ class AuthService:
 
         user.master_password_hash = _hash_password(new_master_password_hash)
         user.protected_symmetric_key = new_protected_symmetric_key
+        user.kdf_iterations = new_kdf_iterations
         await db.flush()
 
         # Force re-login everywhere else - only the session making this
@@ -492,6 +495,44 @@ class AuthService:
             )
         except Exception:
             pass
+
+    # ── Pre-login KDF lookup + silent scheme migration ───────────────────────
+
+    @staticmethod
+    async def get_kdf_iterations(email: str, db: AsyncSession) -> int:
+        """Look up a user's stored KDF iteration count so the client knows
+        what to derive with before attempting login. Returns the current
+        default for an unknown email rather than 404ing, so a client can't
+        trivially distinguish "no such account" from "account, current tier"
+        by response shape alone (iteration count itself can still leak
+        whether an account predates the KDF floor - a narrower, accepted
+        residual gap, not one this endpoint can close without a redesign)."""
+        result = await db.execute(select(User).where(User.email == email.lower().strip()))
+        user = result.scalar_one_or_none()
+        if not user:
+            return MIN_KDF_ITERATIONS
+        return user.kdf_iterations or MIN_KDF_ITERATIONS
+
+    @staticmethod
+    async def migrate_kdf(
+        user: User,
+        old_master_password_hash: str,
+        new_master_password_hash: str,
+        new_protected_symmetric_key: str,
+        new_kdf_iterations: int,
+        db: AsyncSession,
+    ) -> None:
+        is_valid, _ = _verify_password(old_master_password_hash, user.master_password_hash)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current master password is incorrect",
+            )
+
+        user.master_password_hash = _hash_password(new_master_password_hash)
+        user.protected_symmetric_key = new_protected_symmetric_key
+        user.kdf_iterations = new_kdf_iterations
+        await db.flush()
 
     # ── TOTP management ──────────────────────────────────────────────────────
 
