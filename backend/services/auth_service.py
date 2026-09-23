@@ -4,6 +4,7 @@ import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 from fastapi import HTTPException, status, Request
+from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 import jwt as pyjwt
@@ -31,16 +32,30 @@ settings = get_settings()
 # Short-lived MFA challenge token: 5 minutes
 _MFA_TOKEN_EXPIRE_MINUTES = 5
 
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 # ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _hash_password(master_password_hash: str) -> str:
-    return hashlib.sha256(master_password_hash.encode()).hexdigest()
+    """Bcrypt-hash the client-derived masterPasswordHash for storage."""
+    return _pwd_context.hash(master_password_hash)
 
 
-def _verify_password(master_password_hash: str, stored_hash: str) -> bool:
-    expected = hashlib.sha256(master_password_hash.encode()).hexdigest()
-    return hmac.compare_digest(expected, stored_hash)
+def _verify_password(master_password_hash: str, stored_hash: str) -> tuple[bool, bool]:
+    """Verify against the current bcrypt format or a legacy unsalted-SHA256 hash.
+
+    Returns (is_valid, needs_upgrade). needs_upgrade is True when the stored
+    hash used the old scheme and should be re-hashed with bcrypt now that we
+    have the raw masterPasswordHash in hand - this is the only place that
+    value is ever available, since only its hash is persisted, so an offline
+    migration script cannot do this after the fact.
+    """
+    if _pwd_context.identify(stored_hash):
+        return _pwd_context.verify(master_password_hash, stored_hash), False
+
+    legacy_expected = hashlib.sha256(master_password_hash.encode()).hexdigest()
+    return hmac.compare_digest(legacy_expected, stored_hash), True
 
 
 def _create_mfa_token(user_uuid: str) -> str:
@@ -155,7 +170,7 @@ class AuthService:
         return _hash_password(master_password_hash)
 
     @staticmethod
-    def _verify_password(master_password_hash: str, stored_hash: str) -> bool:
+    def _verify_password(master_password_hash: str, stored_hash: str) -> tuple[bool, bool]:
         return _verify_password(master_password_hash, stored_hash)
 
     @staticmethod
@@ -200,7 +215,12 @@ class AuthService:
         result = await db.execute(select(User).where(User.email == data.email.lower()))
         user = result.scalar_one_or_none()
 
-        if not user or not _verify_password(data.masterPasswordHash, user.master_password_hash):
+        is_valid, needs_upgrade = (
+            _verify_password(data.masterPasswordHash, user.master_password_hash)
+            if user else (False, False)
+        )
+
+        if not user or not is_valid:
             # Log failure only when we can identify the user
             if user:
                 await _log_event(user.id, request, LoginStatus.failed, db)
@@ -213,6 +233,11 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or master password",
             )
+
+        if needs_upgrade:
+            # Legacy single-round-SHA256 hash verified correctly - upgrade it to
+            # bcrypt now, since this is the only point the raw value is available.
+            user.master_password_hash = _hash_password(data.masterPasswordHash)
 
         if not user.is_active:
             raise HTTPException(
