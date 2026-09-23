@@ -78,7 +78,7 @@ function PasswordField({
 
 // ── TOTP section ──────────────────────────────────────────────────────────────
 
-function TotpSection() {
+function TotpSection({ onStatusChange }: { onStatusChange?: (enabled: boolean) => void }) {
   const toast = useToast();
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null);
   const [setupSecret, setSetupSecret] = useState('');
@@ -116,6 +116,7 @@ function TotpSection() {
     try {
       await authApi.enableTotp({ secret: setupSecret, totp_code: verifyCode });
       setTotpEnabled(true);
+      onStatusChange?.(true);
       setSetupOpen(false);
       toast.success('Two-factor authentication enabled');
     } catch (err: unknown) {
@@ -125,13 +126,14 @@ function TotpSection() {
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verifyCode, setupSecret]);
+  }, [verifyCode, setupSecret, onStatusChange]);
 
   const handleDisable = useCallback(async () => {
     setDisabling(true);
     try {
       await authApi.disableTotp();
       setTotpEnabled(false);
+      onStatusChange?.(false);
       toast.success('Two-factor authentication disabled');
     } catch {
       toast.error('Failed to disable 2FA');
@@ -139,7 +141,7 @@ function TotpSection() {
       setDisabling(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onStatusChange]);
 
   if (totpEnabled === null) {
     return <p className="text-sm text-gray-400">Loading…</p>;
@@ -353,6 +355,15 @@ export default function Settings() {
   // Change master password state
   const [cpForm, setCpForm] = useState({ current: '', newPw: '', confirm: '' });
   const [cpSaving, setCpSaving] = useState(false);
+  const [cpError, setCpError] = useState<string | null>(null);
+  const [cpTotpEnabled, setCpTotpEnabled] = useState<boolean | null>(null);
+  const [cpTotpCode, setCpTotpCode] = useState('');
+
+  useEffect(() => {
+    authApi.getTotpStatus()
+      .then((r) => setCpTotpEnabled(r.data.totp_enabled))
+      .catch(() => setCpTotpEnabled(false));
+  }, []);
 
   // Security section
   const [loggingOut, setLoggingOut] = useState(false);
@@ -366,6 +377,7 @@ export default function Settings() {
 
   const handleChangeMasterPassword = useCallback(async () => {
     if (!user || !symmetricKey) return;
+    setCpError(null);
     if (!cpForm.current || !cpForm.newPw || !cpForm.confirm) {
       toast.error('All fields are required');
       return;
@@ -376,6 +388,10 @@ export default function Settings() {
     }
     if (cpForm.newPw.length < 8) {
       toast.error('New master password must be at least 8 characters');
+      return;
+    }
+    if (cpTotpEnabled && cpTotpCode.length !== 6) {
+      setCpError('Enter the 6-digit code from your authenticator app');
       return;
     }
 
@@ -391,19 +407,26 @@ export default function Settings() {
         masterPasswordHash: currentHash,
         newMasterPasswordHash: newHash,
         newProtectedSymmetricKey,
+        ...(cpTotpEnabled ? { totp_code: cpTotpCode } : {}),
       });
 
       dispatch(updateProtectedSymmetricKey(newProtectedSymmetricKey));
       setCpForm({ current: '', newPw: '', confirm: '' });
+      setCpTotpCode('');
       toast.success('Master password changed successfully');
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message || 'Failed to change master password';
-      toast.error(msg);
+      const e = err as { message?: string; status?: number };
+      if (e?.status === 400 && !cpTotpEnabled) {
+        // Our cached TOTP status was stale (e.g. 2FA was enabled earlier in
+        // this same session) - reveal the code field so the user can retry.
+        setCpTotpEnabled(true);
+      }
+      setCpError(e?.message || 'Failed to change master password');
     } finally {
       setCpSaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cpForm, user, symmetricKey, kdfIterations, dispatch]);
+  }, [cpForm, cpTotpEnabled, cpTotpCode, user, symmetricKey, kdfIterations, dispatch]);
 
   // ── Logout all ───────────────────────────────────────────────────────────
 
@@ -482,6 +505,27 @@ export default function Settings() {
           onChange={(v) => setCpForm((p) => ({ ...p, confirm: v }))}
           placeholder="Repeat new master password"
         />
+        {cpTotpEnabled && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Two-factor authentication code
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={cpTotpCode}
+              onChange={(e) => setCpTotpCode(e.target.value.replace(/\D/g, '').substring(0, 6))}
+              placeholder="000000"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono tracking-[0.4em] text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+        {cpError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            {cpError}
+          </p>
+        )}
         <button
           type="button"
           onClick={handleChangeMasterPassword}
@@ -494,7 +538,7 @@ export default function Settings() {
 
       {/* Two-factor authentication */}
       <Section title="Two-factor authentication">
-        <TotpSection />
+        <TotpSection onStatusChange={setCpTotpEnabled} />
       </Section>
 
       {/* Security */}

@@ -131,6 +131,7 @@ export const authApi = {
     masterPasswordHash: string;
     newMasterPasswordHash: string;
     newProtectedSymmetricKey: string;
+    totp_code?: string;
   }) {
     try {
       return await client.post('/auth/change-master-password', payload);
