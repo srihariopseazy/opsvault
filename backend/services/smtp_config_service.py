@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import uuid as _uuid
 from typing import Optional
 from datetime import datetime, timezone
@@ -15,9 +14,22 @@ settings = get_settings()
 
 
 def _fernet_key() -> bytes:
-    """Derive a 32-byte URL-safe base64 Fernet key from SECRET_KEY."""
-    digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-    return base64.urlsafe_b64encode(digest)
+    """Derive a 32-byte URL-safe base64 Fernet key from SMTP_ENCRYPTION_KEY via HKDF.
+
+    Uses its own secret (SMTP_ENCRYPTION_KEY) rather than SECRET_KEY so that a
+    leaked/rotated JWT signing key doesn't also expose stored SMTP credentials.
+    """
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"opsvault-smtp-config-v1",
+        info=b"opsvault-smtp-credential-encryption",
+    )
+    key = hkdf.derive(settings.SMTP_ENCRYPTION_KEY.encode())
+    return base64.urlsafe_b64encode(key)
 
 
 def _encrypt(plaintext: str) -> str:
