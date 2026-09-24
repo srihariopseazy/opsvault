@@ -10,6 +10,7 @@ export interface OpsVaultConfig {
   apiKey?: string;
   email?: string;
   protectedSymmetricKey?: string;
+  kdfIterations?: number;
 }
 
 const DEFAULTS: OpsVaultConfig = {
@@ -36,13 +37,15 @@ export function clearConfig(): void {
   if (fs.existsSync(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE);
 }
 
+type StringConfigKey = 'server' | 'apiKey' | 'email' | 'protectedSymmetricKey';
+
 export function getConfigValue(key: keyof OpsVaultConfig): string | undefined {
   return loadConfig()[key] as string | undefined;
 }
 
-export function setConfigValue(key: keyof OpsVaultConfig, value: string): void {
+export function setConfigValue(key: StringConfigKey, value: string): void {
   const config = loadConfig();
-  (config as Record<string, string>)[key] = value;
+  config[key] = value;
   saveConfig(config);
 }
 

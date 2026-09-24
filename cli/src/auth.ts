@@ -2,9 +2,46 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { loadConfig, saveConfig, clearConfig } from './config';
-import { createBearerClient, createRawClient, apiError } from './api';
-import { deriveMasterKey, deriveMasterPasswordHash, unwrapSymmetricKey } from './crypto';
+import { createBearerClient, createRawClient, apiError, getKdfParams, migrateKdf } from './api';
+import {
+  deriveMasterKey,
+  deriveMasterPasswordHash,
+  unwrapSymmetricKey,
+  wrapSymmetricKey,
+  CURRENT_KDF_ITERATIONS,
+} from './crypto';
 import { printSuccess, printError } from './utils';
+
+/** Best-effort, non-blocking: upgrade a still-legacy account's KDF scheme
+ * right after a successful login. Failures are swallowed - the account
+ * just stays on its current tier and gets another chance next login. */
+async function maybeUpgradeKdf(
+  email: string,
+  password: string,
+  oldMasterKey: string,
+  currentIterations: number,
+  protectedSymmetricKey: string,
+  accessToken: string,
+  server: string,
+): Promise<void> {
+  if (currentIterations >= CURRENT_KDF_ITERATIONS) return;
+  try {
+    const oldHash = await deriveMasterPasswordHash(oldMasterKey, password);
+    const symmetricKey = await unwrapSymmetricKey(protectedSymmetricKey, oldMasterKey);
+
+    const newMasterKey = await deriveMasterKey(password, email, CURRENT_KDF_ITERATIONS);
+    const newHash = await deriveMasterPasswordHash(newMasterKey, password);
+    const newProtectedSymmetricKey = await wrapSymmetricKey(symmetricKey, newMasterKey);
+
+    await migrateKdf(
+      { oldMasterPasswordHash: oldHash, newMasterPasswordHash: newHash, newProtectedSymmetricKey, newKdfIterations: CURRENT_KDF_ITERATIONS },
+      accessToken,
+      server,
+    );
+  } catch {
+    // Silent - never surfaced, never blocks login.
+  }
+}
 
 export async function loginCommand(opts: { server?: string; key?: string }): Promise<void> {
   const config = loadConfig();
@@ -34,13 +71,14 @@ export async function loginCommand(opts: { server?: string; key?: string }): Pro
 
   const spinner = ora('Authenticating…').start();
   try {
-    const masterKey          = deriveMasterKey(password, email);
-    const masterPasswordHash = deriveMasterPasswordHash(masterKey, password);
+    const kdfParams          = await getKdfParams(email, server);
+    const masterKey          = await deriveMasterKey(password, email, kdfParams.kdf_iterations);
+    const masterPasswordHash = await deriveMasterPasswordHash(masterKey, password);
     const raw = createRawClient(server);
 
     const { data: authData } = await raw.post('/auth/login', {
       email,
-      master_password_hash: masterPasswordHash,
+      masterPasswordHash,
       device_fingerprint: 'cli-tool',
     });
 
@@ -70,9 +108,12 @@ export async function loginCommand(opts: { server?: string; key?: string }): Pro
       protectedSymmetricKey = authData.protected_symmetric_key;
     }
 
+    // Best-effort, doesn't block the rest of login.
+    void maybeUpgradeKdf(email, password, masterKey, kdfParams.kdf_iterations, protectedSymmetricKey, accessToken, server);
+
     // If a pre-supplied API key was provided, skip key creation and use it directly
     if (opts.key) {
-      saveConfig({ server, apiKey: opts.key, email, protectedSymmetricKey });
+      saveConfig({ server, apiKey: opts.key, email, protectedSymmetricKey, kdfIterations: kdfParams.kdf_iterations });
       spinner.succeed('Logged in');
       printSuccess(`Connected to ${server} as ${email}`);
       return;
@@ -86,7 +127,7 @@ export async function loginCommand(opts: { server?: string; key?: string }): Pro
       expires_at: null,
     });
 
-    saveConfig({ server, apiKey: keyData.full_key, email, protectedSymmetricKey });
+    saveConfig({ server, apiKey: keyData.full_key, email, protectedSymmetricKey, kdfIterations: kdfParams.kdf_iterations });
     spinner.succeed('Logged in');
     printSuccess(`Connected to ${server} as ${email}`);
     printSuccess(`API key stored: ${String(keyData.full_key).slice(0, 16)}…`);
@@ -120,8 +161,10 @@ export function statusCommand(): void {
   }
 }
 
-/** Prompt for master password and return the unwrapped symmetric key. */
-export async function promptForSymmetricKey(email: string, protectedKey: string): Promise<string> {
+/** Prompt for master password and return the unwrapped symmetric key.
+ * `iterations` should be the account's actual stored value (config.kdfIterations,
+ * falling back to the legacy default for a config saved before this field existed). */
+export async function promptForSymmetricKey(email: string, protectedKey: string, iterations: number): Promise<string> {
   const { password } = await inquirer.prompt([{
     type: 'password',
     name: 'password',
@@ -129,7 +172,8 @@ export async function promptForSymmetricKey(email: string, protectedKey: string)
     mask: '*',
   }]);
   try {
-    return unwrapSymmetricKey(protectedKey, deriveMasterKey(password, email));
+    const masterKey = await deriveMasterKey(password, email, iterations);
+    return await unwrapSymmetricKey(protectedKey, masterKey);
   } catch {
     printError('Incorrect master password');
     process.exit(1);

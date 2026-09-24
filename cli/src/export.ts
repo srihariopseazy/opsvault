@@ -3,7 +3,7 @@ import path from 'path';
 import ora from 'ora';
 import { requireAuth } from './config';
 import { createClient, apiError } from './api';
-import { decryptWithKey } from './crypto';
+import { decryptWithKey, LEGACY_KDF_ITERATIONS } from './crypto';
 import { printSuccess, printError, printWarning } from './utils';
 import { promptForSymmetricKey } from './auth';
 
@@ -32,7 +32,7 @@ export async function exportCommand(opts: {
     printWarning('This export is NOT encrypted.');
   }
 
-  const symKey  = await promptForSymmetricKey(config.email!, config.protectedSymmetricKey!);
+  const symKey  = await promptForSymmetricKey(config.email!, config.protectedSymmetricKey!, config.kdfIterations ?? LEGACY_KDF_ITERATIONS);
   const spinner = ora('Fetching vault…').start();
 
   try {
@@ -42,17 +42,18 @@ export async function exportCommand(opts: {
     const items = data.items.filter((i) => !i.deleted_at);
     spinner.text = `Decrypting ${items.length} items…`;
 
-    const decrypted = items.map((raw) => {
+    const decryptedWithNulls = await Promise.all(items.map(async (raw) => {
       try {
-        const name     = decryptWithKey(raw.name, symKey);
-        const dataStr  = decryptWithKey(raw.item_data, symKey);
+        const name     = await decryptWithKey(raw.name, symKey);
+        const dataStr  = await decryptWithKey(raw.item_data, symKey);
         const itemData = JSON.parse(dataStr) as Record<string, unknown>;
-        const notes    = raw.notes ? decryptWithKey(raw.notes, symKey) : undefined;
+        const notes    = raw.notes ? await decryptWithKey(raw.notes, symKey) : undefined;
         return { uuid: raw.uuid, type: raw.type, name, notes, favorite: raw.favorite, itemData, created_at: raw.created_at };
       } catch {
         return null;
       }
-    }).filter(Boolean);
+    }));
+    const decrypted = decryptedWithNulls.filter(Boolean);
 
     spinner.text = 'Writing file…';
     const absPath = path.resolve(outFile);

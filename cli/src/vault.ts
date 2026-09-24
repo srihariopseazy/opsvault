@@ -4,7 +4,7 @@ import chalk from 'chalk';
 import clipboard from 'clipboardy';
 import { requireAuth } from './config';
 import { createClient, apiError } from './api';
-import { decryptWithKey, encryptWithKey } from './crypto';
+import { decryptWithKey, encryptWithKey, LEGACY_KDF_ITERATIONS } from './crypto';
 import { printTable, printCard, printSuccess, printError, printInfo, printWarning, mask, formatDate, truncate } from './utils';
 import { promptForSymmetricKey } from './auth';
 
@@ -52,22 +52,22 @@ async function getSymKey(): Promise<string> {
     printError('No vault key found. Please run `ovault login` again.');
     process.exit(1);
   }
-  _sessionSymKey = await promptForSymmetricKey(config.email!, config.protectedSymmetricKey);
+  _sessionSymKey = await promptForSymmetricKey(config.email!, config.protectedSymmetricKey, config.kdfIterations ?? LEGACY_KDF_ITERATIONS);
   return _sessionSymKey;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function decryptItem(raw: RawVaultItem, symKey: string): VaultItem | null {
+async function decryptItem(raw: RawVaultItem, symKey: string): Promise<VaultItem | null> {
   try {
-    const name     = decryptWithKey(raw.name, symKey);
-    const dataStr  = decryptWithKey(raw.item_data, symKey);
+    const name     = await decryptWithKey(raw.name, symKey);
+    const dataStr  = await decryptWithKey(raw.item_data, symKey);
     const itemData = JSON.parse(dataStr) as Record<string, unknown>;
     return {
       uuid: raw.uuid,
       type: raw.type,
       name,
-      notes: raw.notes ? decryptWithKey(raw.notes, symKey) : undefined,
+      notes: raw.notes ? await decryptWithKey(raw.notes, symKey) : undefined,
       favorite: raw.favorite,
       folder_id: raw.folder_id,
       itemData,
@@ -84,10 +84,10 @@ function decryptItem(raw: RawVaultItem, symKey: string): VaultItem | null {
 async function fetchAndDecrypt(symKey: string): Promise<VaultItem[]> {
   const client = createClient();
   const { data } = await client.get<{ items: RawVaultItem[] }>('/vault/sync');
-  return data.items
-    .filter((i) => !i.deleted_at)
-    .map((i) => decryptItem(i, symKey))
-    .filter((i): i is VaultItem => i !== null);
+  const decrypted = await Promise.all(
+    data.items.filter((i) => !i.deleted_at).map((i) => decryptItem(i, symKey))
+  );
+  return decrypted.filter((i): i is VaultItem => i !== null);
 }
 
 function findItem(items: VaultItem[], nameOrUuid: string): VaultItem | undefined {
@@ -272,9 +272,9 @@ export async function addCommand(): Promise<void> {
     const client = createClient();
     await client.post('/vault/items', {
       type,
-      name:      encryptWithKey(name, symKey),
-      item_data: encryptWithKey(JSON.stringify(itemData), symKey),
-      notes:     notes ? encryptWithKey(notes, symKey) : null,
+      name:      await encryptWithKey(name, symKey),
+      item_data: await encryptWithKey(JSON.stringify(itemData), symKey),
+      notes:     notes ? await encryptWithKey(notes, symKey) : null,
       favorite,
       reprompt:  false,
     });
@@ -337,9 +337,9 @@ export async function editCommand(nameOrUuid: string): Promise<void> {
     const client = createClient();
     spinner.start('Saving…');
     await client.put(`/vault/items/${item.uuid}`, {
-      name:      encryptWithKey(newName, symKey),
-      item_data: encryptWithKey(JSON.stringify(itemData), symKey),
-      notes:     notes ? encryptWithKey(notes, symKey) : null,
+      name:      await encryptWithKey(newName, symKey),
+      item_data: await encryptWithKey(JSON.stringify(itemData), symKey),
+      notes:     notes ? await encryptWithKey(notes, symKey) : null,
     });
     spinner.succeed('Item updated');
     printSuccess(`"${newName}" saved`);

@@ -23,7 +23,6 @@
     "ora": "^5.4.1"
   },
   "devDependencies": {
-    "@types/cli-table3": "^0.6.4",
     "@types/crypto-js": "^4.2.2",
     "@types/inquirer": "^8.2.10",
     "@types/node": "^20.11.0",
