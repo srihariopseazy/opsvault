@@ -72,7 +72,7 @@ const S = {
 };
 
 export default function LoginPage({ onLoggedIn, savedEmail, savedServer }: Props) {
-  const [server, setServer] = useState(savedServer || 'http://178.105.94.101:8080');
+  const [server, setServer] = useState(savedServer || 'http://opsvault.opseazy.com:8081');
   const [email, setEmail] = useState(savedEmail ?? '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

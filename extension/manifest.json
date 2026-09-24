@@ -11,8 +11,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "http://178.105.94.101/*",
-    "http://localhost:3900/*",
+    "http://opsvault.opseazy.com/*",
+    "http://localhost:8081/*",
     "https://*/*",
     "http://*/*"
   ],

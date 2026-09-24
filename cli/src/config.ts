@@ -15,7 +15,7 @@ export interface OpsVaultConfig {
 }
 
 const DEFAULTS: OpsVaultConfig = {
-  server: 'http://178.105.94.101:8080',
+  server: 'http://opsvault.opseazy.com:8081',
 };
 
 export function loadConfig(): OpsVaultConfig {

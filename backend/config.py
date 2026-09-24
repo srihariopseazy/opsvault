@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+aiomysql://opsvault_user:opsvault_password@opsvault_mysql:3306/opsvault"
     REDIS_URL: str = "redis://opsvault_redis:6379/0"
-    FRONTEND_URL: str = "http://localhost:8080"
+    FRONTEND_URL: str = "http://localhost:8081"
 
     MYSQL_HOST: str = "opsvault_mysql"
     MYSQL_PORT: int = 3306

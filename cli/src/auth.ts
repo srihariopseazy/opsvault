@@ -51,7 +51,7 @@ export async function loginCommand(opts: { server?: string }): Promise<void> {
       type: 'input',
       name: 'server',
       message: 'Server URL:',
-      default: opts.server || config.server || 'http://178.105.94.101:8080',
+      default: opts.server || config.server || 'http://opsvault.opseazy.com:8081',
     },
     {
       type: 'input',
