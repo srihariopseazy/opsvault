@@ -17,7 +17,8 @@ export interface LoginItemData {
 }
 
 export interface StoredCredentials {
-  apiKey: string;
+  accessToken: string;
+  refreshToken: string;
   email: string;
   server: string;
   protectedSymmetricKey: string;

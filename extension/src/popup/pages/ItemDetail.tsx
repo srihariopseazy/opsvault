@@ -95,12 +95,12 @@ export default function ItemDetailPage({ item, currentTabUrl, onBack, onLock }: 
       // Log autofill (best-effort)
       try {
         const { getCredentials } = await import('../../shared/storage');
+        const { apiRequest } = await import('../../shared/api');
         const creds = await getCredentials();
         if (creds) {
-          await fetch(`${creds.server}/api/v1/extension/autofill-log`, {
+          await apiRequest('/extension/autofill-log', creds, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `ApiKey ${creds.apiKey}` },
-            body: JSON.stringify({ item_uuid: item.uuid, url: currentTabUrl }),
+            body: { item_uuid: item.uuid, url: currentTabUrl },
           });
         }
       } catch { /* non-critical */ }

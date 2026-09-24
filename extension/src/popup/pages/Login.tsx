@@ -6,7 +6,7 @@ import {
   wrapSymmetricKey,
   CURRENT_KDF_ITERATIONS,
 } from '../../shared/crypto';
-import { authRequest, createApiKeyWithJwt, syncVault, getKdfParams, migrateKdf } from '../../shared/api';
+import { authRequest, syncVault, getKdfParams, migrateKdf } from '../../shared/api';
 import { setCredentials } from '../../shared/storage';
 import type { DecryptedVaultItem } from '../../shared/types';
 
@@ -92,6 +92,7 @@ export default function LoginPage({ onLoggedIn, savedEmail, savedServer }: Props
 
       const authData = await authRequest<{
         access_token?: string;
+        refresh_token?: string;
         mfa_required?: boolean;
         mfa_token?: string;
         protected_symmetric_key?: string;
@@ -103,17 +104,15 @@ export default function LoginPage({ onLoggedIn, savedEmail, savedServer }: Props
         return;
       }
 
-      const accessToken = authData.access_token!;
-      const psk         = authData.protected_symmetric_key!;
-      const symKey      = await unwrapSymmetricKey(psk, masterKey);
+      const accessToken  = authData.access_token!;
+      const refreshToken = authData.refresh_token!;
+      const psk          = authData.protected_symmetric_key!;
+      const symKey       = await unwrapSymmetricKey(psk, masterKey);
 
       // Best-effort, doesn't block the rest of login.
       void maybeUpgradeKdf(email, password, masterKey, kdfParams.kdf_iterations, psk, accessToken, server);
 
-      // Create extension API key
-      const apiKey = await createApiKeyWithJwt(accessToken, server);
-
-      const credentials = { apiKey, email, server, protectedSymmetricKey: psk };
+      const credentials = { accessToken, refreshToken, email, server, protectedSymmetricKey: psk };
       await setCredentials(credentials);
 
       // Sync vault via service worker
