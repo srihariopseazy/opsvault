@@ -47,9 +47,9 @@ async function decryptItems(
   for (const raw of rawItems) {
     if (raw.deleted_at) continue;
     try {
-      const name    = decryptWithKey(raw.name as string, symKey);
-      const dataStr = decryptWithKey(raw.item_data as string, symKey);
-      const notes   = raw.notes ? decryptWithKey(raw.notes, symKey) : undefined;
+      const name    = await decryptWithKey(raw.name as string, symKey);
+      const dataStr = await decryptWithKey(raw.item_data as string, symKey);
+      const notes   = raw.notes ? await decryptWithKey(raw.notes, symKey) : undefined;
       result.push({
         uuid: raw.uuid,
         type: raw.type as DecryptedVaultItem['type'],

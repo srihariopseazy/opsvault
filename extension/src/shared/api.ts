@@ -41,6 +41,41 @@ export async function authRequest<T>(path: string, body: unknown, server: string
   return res.json() as Promise<T>;
 }
 
+/** Pre-login lookup: what iteration count does this account use? Needed
+ * before deriving the login hash. */
+export async function getKdfParams(email: string, server: string): Promise<{ kdf_iterations: number }> {
+  const url = `${server}/api/v1/auth/kdf-params?email=${encodeURIComponent(email)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Silent crypto-scheme upgrade, fired right after a successful login for an
+ * account still below the current KDF floor. */
+export async function migrateKdf(
+  payload: {
+    oldMasterPasswordHash: string;
+    newMasterPasswordHash: string;
+    newProtectedSymmetricKey: string;
+    newKdfIterations: number;
+  },
+  accessToken: string,
+  server: string,
+): Promise<void> {
+  const res = await fetch(`${server}/api/v1/auth/migrate-kdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? `HTTP ${res.status}`);
+  }
+}
+
 export async function createApiKeyWithJwt(jwt: string, server: string): Promise<string> {
   const url = `${server}/api/v1/api-keys`;
   const res = await fetch(url, {

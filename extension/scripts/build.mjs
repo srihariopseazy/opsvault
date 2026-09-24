@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'child_process';
-import { copyFileSync, mkdirSync, existsSync, cpSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, cpSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -30,13 +30,22 @@ run(`npx esbuild src/content/autofill.ts --bundle --platform=browser --format=ii
 console.log('Copying assets…');
 copyFileSync(resolve(root, 'manifest.json'), resolve(dist, 'manifest.json'));
 
-// 5. Copy icons if they exist
+// 5. Copy icons if they exist, else write placeholders so the manifest's
+//    icon references resolve to real files (Chrome silently refuses to load
+//    an unpacked extension whose declared icons are missing, with no
+//    visible error unless Developer Mode is on).
 const iconsDir = resolve(root, 'icons');
 if (existsSync(iconsDir)) {
   cpSync(iconsDir, resolve(dist, 'icons'), { recursive: true });
 } else {
-  // Create placeholder icon files so manifest doesn't error
-  console.log('Note: no icons/ directory found — add PNG icons before publishing');
+  console.log('Note: no icons/ directory found — writing placeholder icons; add real PNGs before publishing');
+  const placeholderPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  for (const name of ['icon16.png', 'icon48.png', 'icon128.png']) {
+    writeFileSync(resolve(dist, 'icons', name), placeholderPng);
+  }
 }
 
 console.log('✓ Extension built to dist/');

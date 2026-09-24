@@ -1,8 +1,46 @@
 import { useState, useCallback } from 'react';
-import { deriveMasterKey, deriveMasterPasswordHash, unwrapSymmetricKey } from '../../shared/crypto';
-import { authRequest, createApiKeyWithJwt, syncVault } from '../../shared/api';
+import {
+  deriveMasterKey,
+  deriveMasterPasswordHash,
+  unwrapSymmetricKey,
+  wrapSymmetricKey,
+  CURRENT_KDF_ITERATIONS,
+} from '../../shared/crypto';
+import { authRequest, createApiKeyWithJwt, syncVault, getKdfParams, migrateKdf } from '../../shared/api';
 import { setCredentials } from '../../shared/storage';
 import type { DecryptedVaultItem } from '../../shared/types';
+
+/** Best-effort, non-blocking: upgrade a still-legacy account's KDF scheme
+ * right after a successful login. Never surfaced to the user; failures are
+ * swallowed - the account just stays on its current tier and gets another
+ * chance next login. */
+async function maybeUpgradeKdf(
+  email: string,
+  password: string,
+  oldMasterKey: string,
+  currentIterations: number,
+  protectedSymmetricKey: string,
+  accessToken: string,
+  server: string,
+): Promise<void> {
+  if (currentIterations >= CURRENT_KDF_ITERATIONS) return;
+  try {
+    const oldHash = await deriveMasterPasswordHash(oldMasterKey, password);
+    const symmetricKey = await unwrapSymmetricKey(protectedSymmetricKey, oldMasterKey);
+
+    const newMasterKey = await deriveMasterKey(password, email, CURRENT_KDF_ITERATIONS);
+    const newHash = await deriveMasterPasswordHash(newMasterKey, password);
+    const newProtectedSymmetricKey = await wrapSymmetricKey(symmetricKey, newMasterKey);
+
+    await migrateKdf(
+      { oldMasterPasswordHash: oldHash, newMasterPasswordHash: newHash, newProtectedSymmetricKey, newKdfIterations: CURRENT_KDF_ITERATIONS },
+      accessToken,
+      server,
+    );
+  } catch (err) {
+    console.error('[extension] silent KDF upgrade failed (non-fatal):', err);
+  }
+}
 
 interface Props {
   onLoggedIn: (items: DecryptedVaultItem[]) => void;
@@ -48,15 +86,16 @@ export default function LoginPage({ onLoggedIn, savedEmail, savedServer }: Props
     setLoading(true);
 
     try {
-      const masterKey          = deriveMasterKey(password, email);
-      const masterPasswordHash = deriveMasterPasswordHash(masterKey, password);
+      const kdfParams          = await getKdfParams(email, server);
+      const masterKey          = await deriveMasterKey(password, email, kdfParams.kdf_iterations);
+      const masterPasswordHash = await deriveMasterPasswordHash(masterKey, password);
 
       const authData = await authRequest<{
         access_token?: string;
         mfa_required?: boolean;
         mfa_token?: string;
         protected_symmetric_key?: string;
-      }>('/auth/login', { email, master_password_hash: masterPasswordHash, device_fingerprint: 'extension' }, server);
+      }>('/auth/login', { email, masterPasswordHash, device_fingerprint: 'extension' }, server);
 
       if (authData.mfa_required) {
         setError('TOTP required — use the web app to log in first, then re-open the extension.');
@@ -66,7 +105,10 @@ export default function LoginPage({ onLoggedIn, savedEmail, savedServer }: Props
 
       const accessToken = authData.access_token!;
       const psk         = authData.protected_symmetric_key!;
-      const symKey      = unwrapSymmetricKey(psk, masterKey);
+      const symKey      = await unwrapSymmetricKey(psk, masterKey);
+
+      // Best-effort, doesn't block the rest of login.
+      void maybeUpgradeKdf(email, password, masterKey, kdfParams.kdf_iterations, psk, accessToken, server);
 
       // Create extension API key
       const apiKey = await createApiKeyWithJwt(accessToken, server);
