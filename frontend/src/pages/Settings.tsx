@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import { RootState, AppDispatch } from '../store';
-import { clearAuth, updateProtectedSymmetricKey } from '../store/slices/authSlice';
+import { clearAuth, applyKdfMigration } from '../store/slices/authSlice';
 import { lockVault } from '../store/slices/vaultSlice';
 import { authApi } from '../api/authApi';
 import { settingsApi } from '../api/settingsApi';
@@ -14,6 +14,7 @@ import {
   deriveMasterKey,
   deriveMasterPasswordHash,
   wrapSymmetricKey,
+  CURRENT_KDF_ITERATIONS,
 } from '../crypto/cryptoEngine';
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
@@ -399,7 +400,10 @@ export default function Settings() {
     try {
       const currentMasterKey = await deriveMasterKey(cpForm.current, user.email, kdfIterations);
       const currentHash = await deriveMasterPasswordHash(currentMasterKey, cpForm.current);
-      const newMasterKey = await deriveMasterKey(cpForm.newPw, user.email, kdfIterations);
+      // Every deliberate password change also upgrades to the strongest
+      // scheme this browser can currently reach, regardless of what tier
+      // the account was on before.
+      const newMasterKey = await deriveMasterKey(cpForm.newPw, user.email, CURRENT_KDF_ITERATIONS);
       const newHash = await deriveMasterPasswordHash(newMasterKey, cpForm.newPw);
       const newProtectedSymmetricKey = await wrapSymmetricKey(symmetricKey, newMasterKey);
 
@@ -407,10 +411,11 @@ export default function Settings() {
         masterPasswordHash: currentHash,
         newMasterPasswordHash: newHash,
         newProtectedSymmetricKey,
+        newKdfIterations: CURRENT_KDF_ITERATIONS,
         ...(cpTotpEnabled ? { totp_code: cpTotpCode } : {}),
       });
 
-      dispatch(updateProtectedSymmetricKey(newProtectedSymmetricKey));
+      dispatch(applyKdfMigration({ newProtectedSymmetricKey, newKdfIterations: CURRENT_KDF_ITERATIONS }));
       setCpForm({ current: '', newPw: '', confirm: '' });
       setCpTotpCode('');
       toast.success('Master password changed successfully');

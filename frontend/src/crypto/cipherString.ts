@@ -1,12 +1,18 @@
-// CipherString format: "2.<iv_base64>|<ciphertext_base64>"
-// Type 2 = AES-256-GCM
+// CipherString format: "<type>.<iv_base64>|<ciphertext_base64>"
+// Type 2 = AES-256-CTR (crypto-js; used when WebCrypto is unavailable, and by
+//          any account/item created before the WebCrypto/AES-GCM migration -
+//          not actually GCM despite what this file used to claim)
+// Type 3 = AES-256-GCM (WebCrypto, authenticated) - written whenever WebCrypto
+//          is available; the ciphertext includes the GCM auth tag, appended
+//          by SubtleCrypto's own encrypt() output
 
-export const CIPHER_TYPE = '2';
+export const CIPHER_TYPE_CTR = '2';
+export const CIPHER_TYPE_GCM = '3';
 
-export function buildCipherString(iv: Uint8Array, ciphertext: Uint8Array): string {
+export function buildCipherString(type: string, iv: Uint8Array, ciphertext: Uint8Array): string {
   const ivB64 = btoa(String.fromCharCode(...iv));
   const ctB64 = btoa(String.fromCharCode(...ciphertext));
-  return `${CIPHER_TYPE}.${ivB64}|${ctB64}`;
+  return `${type}.${ivB64}|${ctB64}`;
 }
 
 export function parseCipherString(cipherString: string): {
@@ -38,5 +44,8 @@ export function parseCipherString(cipherString: string): {
 
 export function isCipherString(value: string): boolean {
   if (!value || typeof value !== 'string') return false;
-  return value.startsWith(`${CIPHER_TYPE}.`) && value.includes('|');
+  return (
+    (value.startsWith(`${CIPHER_TYPE_CTR}.`) || value.startsWith(`${CIPHER_TYPE_GCM}.`)) &&
+    value.includes('|')
+  );
 }

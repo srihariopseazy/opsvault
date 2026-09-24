@@ -76,8 +76,16 @@ const authSlice = createSlice({
       state.protectedSymmetricKey = action.payload;
       saveAuthState(state);
     },
+    applyKdfMigration(
+      state,
+      action: PayloadAction<{ newProtectedSymmetricKey: string; newKdfIterations: number }>
+    ) {
+      state.protectedSymmetricKey = action.payload.newProtectedSymmetricKey;
+      state.kdfIterations = action.payload.newKdfIterations;
+      saveAuthState(state);
+    },
   },
 });
 
-export const { setAuth, clearAuth, updateProtectedSymmetricKey } = authSlice.actions;
+export const { setAuth, clearAuth, updateProtectedSymmetricKey, applyKdfMigration } = authSlice.actions;
 export default authSlice.reducer;

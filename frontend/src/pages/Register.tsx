@@ -6,8 +6,9 @@ import { setAuth } from '../store/slices/authSlice';
 import { setSymmetricKey, setItems } from '../store/slices/vaultSlice';
 import { authApi } from '../api/authApi';
 import { useCrypto } from '../hooks/useCrypto';
+import { CURRENT_KDF_ITERATIONS } from '../crypto/cryptoEngine';
 import { useToast } from '../components/ui/Toast';
-import { ROUTES, KDF_ITERATIONS } from '../utils/constants';
+import { ROUTES } from '../utils/constants';
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
@@ -59,7 +60,7 @@ export default function Register() {
     setSubmitting(true);
     try {
       console.log('[Register] step 1: deriving master key…');
-      const masterKey = await deriveMasterKey(form.password, form.email, KDF_ITERATIONS);
+      const masterKey = await deriveMasterKey(form.password, form.email, CURRENT_KDF_ITERATIONS);
 
       console.log('[Register] step 2: deriving master password hash…');
       const masterPasswordHash = await deriveMasterPasswordHash(masterKey, form.password);
@@ -77,7 +78,7 @@ export default function Register() {
         masterPasswordHash,
         masterPasswordHint: form.hint || undefined,
         protectedSymmetricKey,
-        kdfIterations: KDF_ITERATIONS,
+        kdfIterations: CURRENT_KDF_ITERATIONS,
       });
       console.log('[Register] step 6: register API returned', data.user);
 

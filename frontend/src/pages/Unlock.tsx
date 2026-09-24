@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { setSymmetricKey, setItems, setLoading } from '../store/slices/vaultSlice';
-import { clearAuth } from '../store/slices/authSlice';
+import { clearAuth, applyKdfMigration } from '../store/slices/authSlice';
 import { useCrypto } from '../hooks/useCrypto';
 import { decryptWithKey } from '../crypto/cryptoEngine';
+import { maybeUpgradeKdf } from '../crypto/kdfMigration';
 import { vaultApi } from '../api/vaultApi';
 import { authApi } from '../api/authApi';
 import { useToast } from '../components/ui/Toast';
@@ -43,6 +44,13 @@ export default function Unlock() {
       console.log('[Unlock] step 2: unwrapping symmetric key…');
       const symKey = await unwrapSymmetricKey(protectedSymmetricKey, masterKey);
       dispatch(setSymmetricKey(symKey));
+
+      // Best-effort, non-blocking: upgrade a still-legacy account's KDF
+      // scheme now that we have the plaintext password in hand.
+      maybeUpgradeKdf(user.email, password, masterKey, kdfIterations, protectedSymmetricKey)
+        .then((result) => {
+          if (result) dispatch(applyKdfMigration(result));
+        });
 
       console.log('[Unlock] step 3: syncing vault…');
       dispatch(setLoading(true));

@@ -131,12 +131,40 @@ export const authApi = {
     masterPasswordHash: string;
     newMasterPasswordHash: string;
     newProtectedSymmetricKey: string;
+    newKdfIterations: number;
     totp_code?: string;
   }) {
     try {
       return await client.post('/auth/change-master-password', payload);
     } catch (err) {
       throw toError('changeMasterPassword', err);
+    }
+  },
+
+  /** Pre-login lookup: what iteration count does this account (or the
+   * current default, if unknown) use? Needed before deriving the login
+   * hash, since the client must reproduce the exact same derivation the
+   * account was created/last migrated under. */
+  async getKdfParams(email: string) {
+    try {
+      return await client.get<{ kdf_iterations: number }>('/auth/kdf-params', { params: { email } });
+    } catch (err) {
+      throw toError('getKdfParams', err);
+    }
+  },
+
+  /** Silent crypto-scheme upgrade, fired automatically right after a
+   * successful login for an account still below the current KDF floor. */
+  async migrateKdf(payload: {
+    oldMasterPasswordHash: string;
+    newMasterPasswordHash: string;
+    newProtectedSymmetricKey: string;
+    newKdfIterations: number;
+  }) {
+    try {
+      return await client.post<{ message: string }>('/auth/migrate-kdf', payload);
+    } catch (err) {
+      throw toError('migrateKdf', err);
     }
   },
 

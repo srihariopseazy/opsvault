@@ -2,13 +2,14 @@ import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../store';
-import { setAuth } from '../store/slices/authSlice';
+import { setAuth, applyKdfMigration } from '../store/slices/authSlice';
 import { setSymmetricKey, setItems, setLoading } from '../store/slices/vaultSlice';
 import { authApi, AuthResponse } from '../api/authApi';
 import { ssoApi } from '../api/ssoApi';
 import { vaultApi } from '../api/vaultApi';
 import { useCrypto } from '../hooks/useCrypto';
 import { decryptWithKey } from '../crypto/cryptoEngine';
+import { maybeUpgradeKdf } from '../crypto/kdfMigration';
 import { useToast } from '../components/ui/Toast';
 import { ROUTES } from '../utils/constants';
 import { DecryptedVaultItem } from '../store/slices/vaultSlice';
@@ -78,6 +79,13 @@ export default function Login() {
     const symKey = await unwrapSymmetricKey(data.protected_symmetric_key, masterKey);
     dispatch(setSymmetricKey(symKey));
 
+    // Best-effort, non-blocking: upgrade a still-legacy account's KDF scheme
+    // now that we have the plaintext password in hand. Never blocks login.
+    maybeUpgradeKdf(data.user.email, password, masterKey, data.kdf_iterations, data.protected_symmetric_key)
+      .then((result) => {
+        if (result) dispatch(applyKdfMigration(result));
+      });
+
     dispatch(setLoading(true));
     const syncRes = await vaultApi.sync();
     const decrypted: DecryptedVaultItem[] = (
@@ -115,7 +123,7 @@ export default function Login() {
     dispatch(setLoading(false));
     navigate(ROUTES.VAULT);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, navigate, unwrapSymmetricKey]);
+  }, [dispatch, navigate, unwrapSymmetricKey, password]);
 
   // ── Step 1: email + password ──────────────────────────────────────────────
 
@@ -124,7 +132,8 @@ export default function Login() {
     if (!email || !password) return;
     setSubmitting(true);
     try {
-      const masterKey = await deriveMasterKey(password, email);
+      const { data: kdfParams } = await authApi.getKdfParams(email);
+      const masterKey = await deriveMasterKey(password, email, kdfParams.kdf_iterations);
       const masterPasswordHash = await deriveMasterPasswordHash(masterKey, password);
       const fingerprint = deviceFingerprint();
 
