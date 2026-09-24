@@ -1,6 +1,12 @@
 import axios, { AxiosInstance } from 'axios';
-import { loadConfig } from './config';
+import { loadConfig, saveConfig } from './config';
 
+/** Authenticated client for ongoing commands (list/get/add/edit/...): sends
+ * the stored access token as a Bearer header and transparently refreshes
+ * (persisting the new tokens to config.json) once on a 401 before giving up -
+ * each CLI invocation is a fresh process, so a token that expired since the
+ * last login must be silently renewed rather than forcing a re-login every
+ * time. */
 export function createClient(): AxiosInstance {
   const config = loadConfig();
   const client = axios.create({
@@ -8,9 +14,34 @@ export function createClient(): AxiosInstance {
     headers: { 'Content-Type': 'application/json' },
     timeout: 20000,
   });
-  if (config.apiKey) {
-    client.defaults.headers.common['Authorization'] = `ApiKey ${config.apiKey}`;
+  if (config.accessToken) {
+    client.defaults.headers.common['Authorization'] = `Bearer ${config.accessToken}`;
   }
+
+  client.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const original = error.config;
+      if (error.response?.status === 401 && !original._retry && config.refreshToken) {
+        original._retry = true;
+        try {
+          const raw = createRawClient(config.server);
+          const { data } = await raw.post('/auth/refresh', { refresh_token: config.refreshToken });
+          config.accessToken = data.access_token;
+          config.refreshToken = data.refresh_token;
+          saveConfig(config);
+          client.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+          original.headers['Authorization'] = `Bearer ${data.access_token}`;
+          return client(original);
+        } catch {
+          // Refresh itself failed (expired/revoked) - fall through to the
+          // original 401 so the caller sees a real auth error.
+        }
+      }
+      return Promise.reject(error);
+    },
+  );
+
   return client;
 }
 

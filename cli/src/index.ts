@@ -20,8 +20,7 @@ program
   .command('login')
   .description('Authenticate with your OPSVAULT server')
   .option('-s, --server <url>', 'Server URL')
-  .option('-k, --key <apikey>', 'Pre-supply an existing API key (from web UI)')
-  .action(async (opts: { server?: string; key?: string }) => {
+  .action(async (opts: { server?: string }) => {
     await loginCommand(opts);
   });
 
@@ -145,7 +144,7 @@ configCmd
     const config = loadConfig();
     console.log();
     Object.entries(config).forEach(([k, v]) => {
-      const display = k === 'apiKey' && v ? String(v).slice(0, 16) + '…' :
+      const display = (k === 'accessToken' || k === 'refreshToken') && v ? String(v).slice(0, 16) + '…' :
                       k === 'protectedSymmetricKey' && v ? '[encrypted]' : String(v ?? '');
       console.log(`  ${chalk.cyan(k.padEnd(24))} ${display}`);
     });

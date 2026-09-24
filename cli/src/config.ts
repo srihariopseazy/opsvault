@@ -7,7 +7,8 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export interface OpsVaultConfig {
   server: string;
-  apiKey?: string;
+  accessToken?: string;
+  refreshToken?: string;
   email?: string;
   protectedSymmetricKey?: string;
   kdfIterations?: number;
@@ -37,7 +38,7 @@ export function clearConfig(): void {
   if (fs.existsSync(CONFIG_FILE)) fs.unlinkSync(CONFIG_FILE);
 }
 
-type StringConfigKey = 'server' | 'apiKey' | 'email' | 'protectedSymmetricKey';
+type StringConfigKey = 'server' | 'accessToken' | 'refreshToken' | 'email' | 'protectedSymmetricKey';
 
 export function getConfigValue(key: keyof OpsVaultConfig): string | undefined {
   return loadConfig()[key] as string | undefined;
@@ -51,7 +52,7 @@ export function setConfigValue(key: StringConfigKey, value: string): void {
 
 export function requireAuth(): OpsVaultConfig {
   const config = loadConfig();
-  if (!config.apiKey || !config.email) {
+  if (!config.accessToken || !config.email) {
     console.error('Not logged in. Run: ovault login');
     process.exit(1);
   }

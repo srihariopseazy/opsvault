@@ -2,7 +2,7 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import { loadConfig, saveConfig, clearConfig } from './config';
-import { createBearerClient, createRawClient, apiError, getKdfParams, migrateKdf } from './api';
+import { createRawClient, apiError, getKdfParams, migrateKdf } from './api';
 import {
   deriveMasterKey,
   deriveMasterPasswordHash,
@@ -43,7 +43,7 @@ async function maybeUpgradeKdf(
   }
 }
 
-export async function loginCommand(opts: { server?: string; key?: string }): Promise<void> {
+export async function loginCommand(opts: { server?: string }): Promise<void> {
   const config = loadConfig();
 
   const { server, email } = await inquirer.prompt([
@@ -83,6 +83,7 @@ export async function loginCommand(opts: { server?: string; key?: string }): Pro
     });
 
     let accessToken: string;
+    let refreshToken: string;
     let protectedSymmetricKey: string;
 
     if (authData.mfa_required) {
@@ -102,35 +103,20 @@ export async function loginCommand(opts: { server?: string; key?: string }): Pro
         device_name: 'OPSVAULT CLI',
       });
       accessToken = mfaData.access_token;
+      refreshToken = mfaData.refresh_token;
       protectedSymmetricKey = mfaData.protected_symmetric_key;
     } else {
       accessToken = authData.access_token;
+      refreshToken = authData.refresh_token;
       protectedSymmetricKey = authData.protected_symmetric_key;
     }
 
     // Best-effort, doesn't block the rest of login.
     void maybeUpgradeKdf(email, password, masterKey, kdfParams.kdf_iterations, protectedSymmetricKey, accessToken, server);
 
-    // If a pre-supplied API key was provided, skip key creation and use it directly
-    if (opts.key) {
-      saveConfig({ server, apiKey: opts.key, email, protectedSymmetricKey, kdfIterations: kdfParams.kdf_iterations });
-      spinner.succeed('Logged in');
-      printSuccess(`Connected to ${server} as ${email}`);
-      return;
-    }
-
-    spinner.text = 'Creating CLI API key…';
-    const bearer = createBearerClient(accessToken, server);
-    const { data: keyData } = await bearer.post('/api-keys', {
-      name: 'CLI',
-      scopes: ['read', 'write'],
-      expires_at: null,
-    });
-
-    saveConfig({ server, apiKey: keyData.full_key, email, protectedSymmetricKey, kdfIterations: kdfParams.kdf_iterations });
+    saveConfig({ server, accessToken, refreshToken, email, protectedSymmetricKey, kdfIterations: kdfParams.kdf_iterations });
     spinner.succeed('Logged in');
     printSuccess(`Connected to ${server} as ${email}`);
-    printSuccess(`API key stored: ${String(keyData.full_key).slice(0, 16)}…`);
   } catch (err) {
     spinner.fail('Login failed');
     printError(apiError(err));
@@ -149,14 +135,14 @@ export function statusCommand(): void {
   const rows: Array<{ label: string; value: string }> = [
     { label: 'Server',    value: config.server },
     { label: 'Email',     value: config.email    || chalk.gray('(not set)') },
-    { label: 'API Key',   value: config.apiKey   ? config.apiKey.slice(0, 16) + '…' : chalk.gray('(none)') },
+    { label: 'Session',   value: config.accessToken ? chalk.green('logged in') : chalk.gray('(none)') },
     { label: 'Vault key', value: config.protectedSymmetricKey ? chalk.green('present') : chalk.gray('missing') },
   ];
   rows.forEach(({ label, value }) => {
     console.log(`  ${chalk.cyan(label.padEnd(12))} ${value}`);
   });
   console.log();
-  if (!config.apiKey) {
+  if (!config.accessToken) {
     console.log(chalk.yellow('  Run `ovault login` to authenticate.\n'));
   }
 }
