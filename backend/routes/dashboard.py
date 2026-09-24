@@ -68,7 +68,7 @@ async def get_stats(
         recent_items=[
             RecentItemSummary(
                 uuid=r.uuid,
-                type=r.type.value if hasattr(r.type, "value") else str(r.type),
+                type=r.type.value,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
@@ -77,7 +77,7 @@ async def get_stats(
         recent_modified=[
             RecentItemSummary(
                 uuid=r.uuid,
-                type=r.type.value if hasattr(r.type, "value") else str(r.type),
+                type=r.type.value,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )

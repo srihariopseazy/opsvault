@@ -70,6 +70,12 @@ class VaultService:
         )
         db.add(item)
         await db.flush()
+        # created_at/updated_at/revision_date are populated by func.now() at
+        # INSERT time (server/SQL-evaluated, not a Python-side default), so
+        # they aren't in the object's in-memory state yet after flush() -
+        # accessing them as-is would trigger an implicit lazy-load, which
+        # isn't valid in an async session. Refresh to pull the real values.
+        await db.refresh(item)
         return _to_response(item)
 
     @staticmethod
@@ -143,6 +149,11 @@ class VaultService:
 
         item.revision_date = datetime.now(timezone.utc)
         await db.flush()
+        # updated_at is server-evaluated (onupdate=func.now()) - any UPDATE
+        # expires it in the async session's identity map, and accessing an
+        # expired attribute without refreshing first isn't valid here (same
+        # issue as create_item's initial timestamps).
+        await db.refresh(item)
         return _to_response(item)
 
     @staticmethod
@@ -191,6 +202,7 @@ class VaultService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found in trash")
         item.deleted_at = None
         await db.flush()
+        await db.refresh(item)  # updated_at is server-evaluated - see update_item
         return _to_response(item)
 
     @staticmethod
@@ -233,4 +245,5 @@ class VaultService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
         item.favorite = 0 if item.favorite else 1
         await db.flush()
+        await db.refresh(item)  # updated_at is server-evaluated - see update_item
         return _to_response(item)

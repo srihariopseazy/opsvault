@@ -2,9 +2,11 @@ from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 
+from models.vault_item import VaultItemType
+
 
 class VaultItemCreate(BaseModel):
-    type: str
+    type: VaultItemType
     name: str
     notes: Optional[str] = None
     favorite: bool = False
